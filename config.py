@@ -44,14 +44,14 @@ parser.add_argument('--resolution-wide', type=int, default=32, metavar='', help=
 parser.add_argument('--ndim', type=int, default=None, metavar='', help='number of feature dimensions')
 parser.add_argument('--nunits', type=int, default=None, metavar='', help='number of units in hidden layers')
 parser.add_argument('--dropout', type=float, default=None, metavar='', help='dropout parameter')
-parser.add_argument('--net-type', type=str, default='noiseresnet18', metavar='', help='type of network')
+parser.add_argument('--net-type', type=str, default='resnet18', metavar='', help='type of network')
 parser.add_argument('--length-scale', type=float, default=None, metavar='', help='length scale')
 parser.add_argument('--tau', type=float, default=None, metavar='', help='Tau')
 
 # ======================== Training Settings =======================================
 parser.add_argument('--cuda', type=bool, default=True, metavar='', help='run on gpu')
-parser.add_argument('--conv_first', type=int, default=0, metavar='', help='instead of FirstNoiseLayer, use conv layer with this kernel size')
-parser.add_argument('--perturb_first', type=str, default='broadcast', metavar='', help='method to apply noise in FirstNoiseLayer')
+parser.add_argument('--conv_first', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
+parser.add_argument('--perturb_first', type=str, default='broadcast', metavar='', help='method to apply noise in FirstLayer')
 parser.add_argument('--ngpu', type=int, default=1, metavar='', help='number of gpus to use')
 parser.add_argument('--batch-size', type=int, default=64, metavar='', help='batch size for training')
 parser.add_argument('--nepochs', type=int, default=500, metavar='', help='number of epochs to train')

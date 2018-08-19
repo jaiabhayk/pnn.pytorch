@@ -197,21 +197,21 @@ class ResNet(nn.Module):
         return x
 
 
-def noise_resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, conv_first=3, perturb_first=None, perturb=None):
+def resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, conv_first=3, perturb_first=None, perturb=None):
     if perturb:
         return ResNet(NoiseBasicBlock, [2,2,2,2], nfilters=nfilters, avgpool=avgpool, nclasses=nclasses,
                        nmasks=nmasks, level=level, conv_first=conv_first, perturb_first=perturb_first)
     else:
         return ResNet(BasicBlock, [2, 2, 2, 2], nfilters=nfilters, avgpool=avgpool, nclasses=nclasses, conv_first=conv_first)
 
-def noise_resnet34(nfilters, level=0.1):
+def resnet34(nfilters, level=0.1):
     return ResNet(NoiseBasicBlock, [3,4,6,3], nfilters=nfilters, level=level)
 
-def noise_resnet50(nfilters, level=0.1):
+def resnet50(nfilters, level=0.1):
     return ResNet(NoiseBottleneck, [3,4,6,3], nfilters=nfilters, level=level)
 
-def noise_resnet101(nfilters, level=0.1):
+def resnet101(nfilters, level=0.1):
     return ResNet(NoiseBottleneck, [3,4,23,3], nfilters=nfilters, level=level)
 
-def noise_resnet152(nfilters, level=0.1):
+def resnet152(nfilters, level=0.1):
     return ResNet(NoiseBottleneck, [3,8,36,3], nfilters=nfilters, level=level)
