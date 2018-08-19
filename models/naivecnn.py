@@ -36,7 +36,7 @@ class NoiseModel(nn.Module):
         self.level = level
         
         layers = []
-        layers.append(NoiseLayer(3, nfilters, self.level))
+        layers.append(NoiseLayer(nchannels, nfilters, self.level))
         for i in range(1, nlayers):
             layers.append(self._make_layer(nfilters, nfilters, nblocks, self.level))
             layers.append(nn.MaxPool2d(2,2))

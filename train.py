@@ -1,23 +1,24 @@
 # train.py
 
 import torch
-import torchvision
-import torch.nn as nn
+#import torchvision
+#import torch.nn as nn
 import torch.optim as optim
-from torch.autograd import Variable
+#from torch.autograd import Variable
 
-import plugins
+import numpy as np
+#import plugins
 import math
 
 
 class Trainer():
-    def __init__(self, args, model, criterion):
+    def __init__(self, args, model, loss_fn):
 
         self.args = args
         self.model = model
-        self.criterion = criterion
+        self.loss_fn = loss_fn
 
-        self.port = args.port
+        #self.port = args.port
         self.dir_save = args.save
 
         self.cuda = args.cuda
@@ -56,9 +57,9 @@ class Trainer():
             self.label = self.label.cuda()
             self.input = self.input.cuda()
 
-        self.input = Variable(self.input)
-        self.label = Variable(self.label)
-
+        #self.input = Variable(self.input)
+        #self.label = Variable(self.label)
+        """
         # logging training 
         self.log_loss_train = plugins.Logger(args.logs, 'TrainLogger.txt')
         self.params_loss_train = ['Loss','Accuracy']
@@ -78,7 +79,7 @@ class Trainer():
         self.monitor_test = plugins.Monitor()
         self.params_monitor_test = ['Loss','Accuracy']
         self.monitor_test.register(self.params_monitor_test)
-
+        
         # visualize training
         self.visualizer_train = plugins.Visualizer(self.port, 'Train')
         self.params_visualizer_train = {
@@ -94,17 +95,17 @@ class Trainer():
         'Accuracy':{'dtype':'scalar','vtype':'plot'},
         }
         self.visualizer_test.register(self.params_visualizer_test)
-
+        
         # display training progress
         self.print_train = '[%d/%d][%d/%d] '
         for item in self.params_loss_train:
-            self.print_train = self.print_train + item + " %.4f "
+            self.print_train = self.print_train + item + " %.2f "
 
         # display testing progress
         self.print_test = '[%d/%d][%d/%d] '
         for item in self.params_loss_test:
-            self.print_test = self.print_test + item + " %.4f "
-
+            self.print_test = self.print_test + item + " %.2f "
+        """
         self.evalmodules = []
         
         self.giterations = 0
@@ -149,91 +150,107 @@ class Trainer():
         self.model.train()
 
     def train(self, epoch, dataloader):
-        self.monitor_train.reset()
+        #self.monitor_train.reset()
         data_iter = iter(dataloader)
 
-        self.input.volatile = False
-        self.label.volatile = False
+        #self.input.volatile = False
+        #self.label.volatile = False
 
         self.optimizer = self.get_optimizer(epoch+1, self.optimizer)
 
         # switch to train mode
         self.model_train()
 
+        losses = []
+        accuracies = []
         i = 0
         while i < len(dataloader):
-
-            ############################
-            # Update network
-            ############################
-
             input,label = data_iter.next()
             i += 1
-
+            """
             batch_size = input.size(0)
-            if batch_size == self.batch_size:
-                self.input.data.resize_(input.size()).copy_(input)
-                self.label.data.resize_(label.size()).copy_(label)
+            if batch_size != self.batch_size:
+                print('\n\n')
+            """
+            #print('\n\n\n\nBatch', i, '\n\n')
+            self.input.data.resize_(input.size()).copy_(input)
+            self.label.data.resize_(label.size()).copy_(label)
 
-                output = self.model(self.input)
-                loss = self.criterion(output,self.label)
+            output = self.model(self.input)
+            loss = self.loss_fn(output,self.label)
 
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
 
-                # this is for classfication
-                pred = output.data.max(1)[1]
+            # this is for classfication
+            pred = output.data.max(1)[1]
 
-                acc = float(pred.eq(self.label.data).cpu().sum()*100.0) / float(batch_size)
-                self.losses_train['Accuracy'] = float(acc)
-                self.losses_train['Loss'] = float(loss.data[0])
-                self.monitor_train.update(self.losses_train, batch_size)
-                print(self.print_train % tuple([epoch, self.nepochs, i, len(dataloader)] + [self.losses_train[key] for key in self.params_monitor_train]))
+            acc = pred.eq(self.label.data).cpu().sum()*100.0 / self.batch_size
 
-        loss = self.monitor_train.getvalues()
-        self.log_loss_train.update(loss)
-        self.visualizer_train.update(loss)
-        return self.monitor_train.getvalues('Accuracy')
+            #self.losses_train['Accuracy'] = acc
+            #self.losses_train['Loss'] = loss.item()
+            #self.monitor_train.update(self.losses_train, batch_size)
+            losses.append(loss.item())
+            accuracies.append(acc)
+            if False:#i % self.args.print_freq == 0:
+                avg_loss = np.mean(losses)
+                avg_acc = np.mean(accuracies)
+                #print(self.print_train % tuple([epoch, self.nepochs, i, len(dataloader)] + [self.losses_train[key] for key in self.params_monitor_train]))
+                print(self.print_train % tuple([epoch, self.nepochs, i, len(dataloader)] + [avg_loss, avg_acc]))
+                losses = []
+                accuracies = []
+
+        #loss = self.monitor_train.getvalues()
+        #self.log_loss_train.update(loss)
+        #self.visualizer_train.update(loss)
+        #return self.monitor_train.getvalues('Accuracy')
+        return np.mean(losses), np.mean(accuracies)
 
     def test(self, epoch, dataloader):
-        self.monitor_test.reset()
+        #self.monitor_test.reset()
         data_iter = iter(dataloader)
 
-        self.input.volatile = True
-        self.label.volatile = True
+        #self.input.volatile = True
+        #self.label.volatile = True
 
         # switch to eval mode
-        self.model_eval()
-
+        #self.model_eval()
+        self.model.eval()
+        losses = []
+        accuracies = []
         i = 0
-        while i < len(dataloader):
-
-            ############################
-            # Evaluate Network
-            ############################
-
-            input,label = data_iter.next()
-            i += 1
-
-            batch_size = input.size(0)
-            if batch_size == self.batch_size:
+        with torch.no_grad():
+            while i < len(dataloader):
+                input, label = data_iter.next()
+                i += 1
+                """
+                batch_size = input.size(0)
+                if batch_size != self.batch_size:
+                    print('\n\ninput batch size does not match batch_size setting\n\n\n')
+                    return
+                """
                 self.input.data.resize_(input.size()).copy_(input)
                 self.label.data.resize_(label.size()).copy_(label)
 
-                self.model.zero_grad()
+                #self.model.zero_grad()  # why is this line here?
                 output = self.model(self.input)
-                loss = self.criterion(output,self.label)
+                loss = self.loss_fn(output,self.label)
 
                 # this is for classification
                 pred = output.data.max(1)[1]
-                acc = float(pred.eq(self.label.data).cpu().sum()*100.0) / float(batch_size)
-                self.losses_test['Accuracy'] = float(acc)
-                self.losses_test['Loss'] = float(loss.data[0])
-                self.monitor_test.update(self.losses_test, batch_size)
-                print(self.print_test % tuple([epoch, self.nepochs, i, len(dataloader)] + [self.losses_test[key] for key in self.params_monitor_test]))
+                acc = pred.eq(self.label.data).cpu().sum()*100.0 / self.batch_size
+                losses.append(loss.item())
+                accuracies.append(acc)
+                #self.losses_test['Accuracy'] = float(acc)
+                #self.losses_test['Loss'] = float(loss.item())
+                #self.monitor_test.update(self.losses_test, batch_size)
+                if False:#i % self.args.print_freq == 0:
+                    print(self.print_test % tuple([epoch, self.nepochs, i, len(dataloader)] + [self.losses_test[key] for key in self.params_monitor_test]))
 
-        loss = self.monitor_test.getvalues()
-        self.log_loss_test.update(loss)
-        self.visualizer_test.update(loss)
-        return self.monitor_test.getvalues('Accuracy')
+            #loss = self.monitor_test.getvalues()
+            #self.log_loss_test.update(loss)
+            #self.visualizer_test.update(loss)
+            #return self.monitor_test.getvalues('Accuracy')
+
+        return np.mean(losses), np.mean(accuracies)

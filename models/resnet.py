@@ -80,10 +80,10 @@ class Bottleneck(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, block, layers, nchannels, nfilters, nclasses=1000):
+    def __init__(self, block, layers, nfilters):
         self.inplanes = nfilters
         super(ResNet, self).__init__()
-        self.conv1 = nn.Conv2d(nchannels, nfilters, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(3, nfilters, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(nfilters)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -92,7 +92,7 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 4*nfilters, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 8*nfilters, layers[3], stride=2)
         self.avgpool = nn.AvgPool2d(7, stride=1)
-        self.fc = nn.Linear(8 * nfilters * block.expansion, nclasses)
+        self.fc = nn.Linear(8 * nfilters * block.expansion, 1000)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -119,35 +119,35 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x0):
-        x = self.conv1(x0)
+    def forward(self, x):
+        x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
-        x1 = self.maxpool(x)
+        x = self.maxpool(x)
 
-        x2 = self.layer1(x1)
-        x3 = self.layer2(x2)
-        x4 = self.layer3(x3)
-        x5 = self.layer4(x4)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
 
-        x = self.avgpool(x5)
+        x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        x6 = self.fc(x)
+        x = self.fc(x)
 
-        return [x0,x1,x2,x3,x4,x5]
+        return x
 
 
-def resnet18(nchannels, nfilters, nclasses):
-    return ResNet(BasicBlock, [2,2,2,2], nchannels=nchannels, nfilters=nfilters, nclasses=nclasses)
+def resnet18(nfilters, level=None):
+    return ResNet(BasicBlock, [2,2,2,2], nfilters=nfilters)
 
-def resnet34(nchannels, nfilters, nclasses):
-    return ResNet(BasicBlock, [3,4,6,3], nchannels=nchannels, nfilters=nfilters, nclasses=nclasses)
+def resnet34(nfilters, level=None):
+    return ResNet(BasicBlock, [3,4,6,3], nfilters=nfilters)
 
-def resnet50(nchannels, nfilters, nclasses):
-    return ResNet(Bottleneck, [3,4,6,3], nchannels=nchannels, nfilters=nfilters, nclasses=nclasses)
+def resnet50(nfilters, level=None):
+    return ResNet(Bottleneck, [3,4,6,3], nfilters=nfilters)
 
-def resnet101(nchannels, nfilters, nclasses):
-    return ResNet(Bottleneck, [3,4,23,3], nchannels=nchannels, nfilters=nfilters, nclasses=nclasses)
+def resnet101(nfilters, level=None):
+    return ResNet(Bottleneck, [3,4,23,3], nfilters=nfilters)
 
-def resnet152(nchannels, nfilters, nclasses):
-    return ResNet(Bottleneck, [3,8,36,3], nchannels=nchannels, nfilters=nfilters, nclasses=nclasses)
+def resnet152(nfilters, level=None):
+    return ResNet(Bottleneck, [3,8,36,3], nfilters=nfilters)

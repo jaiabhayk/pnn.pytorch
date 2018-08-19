@@ -13,7 +13,7 @@ parser.add_argument('--dataset-test', type=str, default='CIFAR10', metavar='', h
 parser.add_argument('--dataset-train', type=str, default='CIFAR10', metavar='', help='name of training dataset')
 parser.add_argument('--split_test', type=float, default=None, metavar='', help='percentage of test dataset to split')
 parser.add_argument('--split_train', type=float, default=None, metavar='', help='percentage of train dataset to split')
-parser.add_argument('--dataroot', type=str, default='../../data', metavar='', help='path to the data')
+parser.add_argument('--dataroot', type=str, default='./data', metavar='', help='path to the data')
 parser.add_argument('--save', type=str, default=result_path +'Save', metavar='', help='save the trained models here')
 parser.add_argument('--logs', type=str, default=result_path +'Logs', metavar='', help='save the training log files here')
 parser.add_argument('--resume', type=str, default=None, metavar='', help='full path of models to resume training')
@@ -26,12 +26,19 @@ parser.add_argument('--loader-input', type=str, default=None, metavar='', help='
 parser.add_argument('--loader-label', type=str, default=None, metavar='', help='label loader')
 
 # ======================== Network Model Setings ===================================
+feature_parser = parser.add_mutually_exclusive_group(required=False)
+feature_parser.add_argument('--perturb', dest='perturb', action='store_true')
+feature_parser.add_argument('--no-perturb', dest='perturb', action='store_false')
+parser.set_defaults(perturb=False)
+
+#parser.add_argument('--perturb', type=bool, default=True, metavar='', help='if False, use standard ResNet (no perturb layers)')
 parser.add_argument('--nblocks', type=int, default=10, metavar='', help='number of blocks in each layer')
 parser.add_argument('--nlayers', type=int, default=6, metavar='', help='number of layers')
 parser.add_argument('--nchannels', type=int, default=3, metavar='', help='number of input channels')
 parser.add_argument('--nfilters', type=int, default=64, metavar='', help='number of filters in each layer')
-parser.add_argument('--avgpool', type=int, default=1, metavar='', help='set to 7 for imagenet and 1 for cifar10')
-parser.add_argument('--level', type=float, default=0.1, metavar='', help='noise level for uniform noise')
+parser.add_argument('--nmasks', type=int, default=32, metavar='', help='number of noise masks per input channel (fan out)')
+parser.add_argument('--avgpool', type=int, default=4, metavar='', help='set to 7 for imagenet and 1 for cifar10')
+parser.add_argument('--level', type=float, default=0.5, metavar='', help='noise level for uniform noise')
 parser.add_argument('--resolution-high', type=int, default=32, metavar='', help='image resolution height')
 parser.add_argument('--resolution-wide', type=int, default=32, metavar='', help='image resolution width')
 parser.add_argument('--ndim', type=int, default=None, metavar='', help='number of feature dimensions')
@@ -43,6 +50,8 @@ parser.add_argument('--tau', type=float, default=None, metavar='', help='Tau')
 
 # ======================== Training Settings =======================================
 parser.add_argument('--cuda', type=bool, default=True, metavar='', help='run on gpu')
+parser.add_argument('--conv_first', type=int, default=0, metavar='', help='instead of FirstNoiseLayer, use conv layer with this kernel size')
+parser.add_argument('--perturb_first', type=str, default='broadcast', metavar='', help='method to apply noise in FirstNoiseLayer')
 parser.add_argument('--ngpu', type=int, default=1, metavar='', help='number of gpus to use')
 parser.add_argument('--batch-size', type=int, default=64, metavar='', help='batch size for training')
 parser.add_argument('--nepochs', type=int, default=500, metavar='', help='number of epochs to train')
@@ -50,7 +59,8 @@ parser.add_argument('--niters', type=int, default=None, metavar='', help='number
 parser.add_argument('--epoch-number', type=int, default=None, metavar='', help='epoch number')
 parser.add_argument('--nthreads', type=int, default=20, metavar='', help='number of threads for data loading')
 parser.add_argument('--manual-seed', type=int, default=1, metavar='', help='manual seed for randomness')
-parser.add_argument('--port', type=int, default=8097, metavar='', help='port for visualizing training at http://localhost:port')
+parser.add_argument('--print_freq', type=int, default=100, metavar='', help='print results every print_freq batches')
+#parser.add_argument('--port', type=int, default=8097, metavar='', help='port for visualizing training at http://localhost:port')
 
 # ======================== Hyperparameter Setings ==================================
 parser.add_argument('--optim-method', type=str, default='Adam', metavar='', help='the optimization routine ')
