@@ -12,34 +12,33 @@ else:
 
 
 class FirstLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, nmasks, level, conv_first, perturb_first):
+    def __init__(self, in_channels, out_channels, nmasks, level, first_conv):
         super(FirstLayer, self).__init__()
         self.noise = nn.Parameter(torch.Tensor(0), requires_grad=False).to(device)
         self.nmasks = nmasks    #per input channel
         self.level = level
-        self.perturb_first = perturb_first
-        self.conv_first = conv_first
-        if conv_first == 1:
+        self.first_conv = first_conv
+        if first_conv == 1:
             stride = 1
             padding = 0
             bias = True
-        elif conv_first == 3:
+        elif first_conv == 3:
             stride = 1
             padding = 1
             bias = False
-        elif conv_first == 7:
+        elif first_conv == 7:
             stride = 2
             padding = 3
             bias = False
 
-        if self.conv_first > 0:
-            self.conv_first_layers = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, kernel_size=conv_first, padding=padding, stride=stride, bias=bias),
+        if self.first_conv > 0:   #if first_conv=0, first_layer=[perturb, conv1x1] else first_layer=[convnxn], n=first_conv
+            self.layers = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=first_conv, padding=padding, stride=stride, bias=bias),
                 nn.BatchNorm2d(out_channels),
                 nn.ReLU(True),  #TODO: not sure if it's needed
             )
-        elif self.perturb_first:
-            self.perturb_first_layers = nn.Sequential(
+        else:
+            self.layers = nn.Sequential(
                 nn.ReLU(True),
                 #nn.BatchNorm2d(out_channels), #TODO: orig code uses BN here
                 nn.Conv2d(in_channels*nmasks, out_channels, kernel_size=1, stride=1, groups=1),   #TODO try groups=3
@@ -49,18 +48,14 @@ class FirstLayer(nn.Module):
     def forward(self, x):
         bs, in_channels, h, v = list(x.size())
 
-        if self.conv_first > 0:
-            return self.conv_first_layers(x)  #image, conv, batchnorm, (relu?)
-
-        elif self.perturb_first == "broadcast":
+        if self.first_conv > 0:
+            return self.layers(x)  #image, conv, batchnorm, (relu?)
+        else:
             if self.noise.numel() == 0:
                 self.noise.resize_(1, in_channels, self.nmasks, h, v).uniform_()  #(1, 3, 9, 32, 32)
                 self.noise = (2 * self.noise - 1) * self.level
             y = torch.add(x.unsqueeze(2), self.noise)  # (10, 3, 1, 32, 32) + (1, 3, 9, 32, 32) --> (10, 3, 9, 32, 32)
-            return self.perturb_first_layers(y.view(bs, in_channels * self.nmasks, h, v))  #image, perturb, relu, conv1x1, batchnorm
-
-        elif self.perturb_first != "broadcast":
-            raise NotImplementedError('{} perturbation method has not been implemented.'.format(self.perturb_first))
+            return self.layers(y.view(bs, in_channels * self.nmasks, h, v))  #image, perturb, relu, conv1x1, batchnorm
 
 
 class NoiseLayer(nn.Module):
@@ -154,13 +149,13 @@ class NoiseBottleneck(nn.Module):
 
 class ResNet(nn.Module):
     def __init__(self, block=None, nblocks=None, avgpool=None, nfilters=None, nclasses=None,
-                            nmasks=None, level=None, conv_first=None, perturb_first=None):
+                            nmasks=None, level=None, first_conv=None):
         super(ResNet, self).__init__()
         self.in_channels = 3 * nmasks if nmasks else nfilters
         layers = [FirstLayer(in_channels=3, out_channels=self.in_channels, nmasks=nmasks,
-                                  level=level, conv_first=conv_first, perturb_first=perturb_first)]
+                                  level=level, first_conv=first_conv)]
 
-        if conv_first == 7:
+        if first_conv == 7:
             layers.append(nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
 
         self.pre_layers = nn.Sequential(*layers)
@@ -197,12 +192,12 @@ class ResNet(nn.Module):
         return x
 
 
-def resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, conv_first=3, perturb_first=None, perturb=None):
+def resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, first_conv=3, perturb=None):
     if perturb:
         return ResNet(NoiseBasicBlock, [2,2,2,2], nfilters=nfilters, avgpool=avgpool, nclasses=nclasses,
-                       nmasks=nmasks, level=level, conv_first=conv_first, perturb_first=perturb_first)
+                       nmasks=nmasks, level=level, first_conv=first_conv)
     else:
-        return ResNet(BasicBlock, [2, 2, 2, 2], nfilters=nfilters, avgpool=avgpool, nclasses=nclasses, conv_first=conv_first)
+        return ResNet(BasicBlock, [2, 2, 2, 2], nfilters=nfilters, avgpool=avgpool, nclasses=nclasses, first_conv=first_conv)
 
 def resnet34(nfilters, level=0.1):
     return ResNet(NoiseBasicBlock, [3,4,6,3], nfilters=nfilters, level=level)

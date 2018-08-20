@@ -31,7 +31,7 @@ feature_parser.add_argument('--perturb', dest='perturb', action='store_true')
 feature_parser.add_argument('--no-perturb', dest='perturb', action='store_false')
 parser.set_defaults(perturb=False)
 
-#parser.add_argument('--perturb', type=bool, default=True, metavar='', help='if False, use standard ResNet (no perturb layers)')
+parser.add_argument('--first_conv', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
 parser.add_argument('--nblocks', type=int, default=10, metavar='', help='number of blocks in each layer')
 parser.add_argument('--nlayers', type=int, default=6, metavar='', help='number of layers')
 parser.add_argument('--nchannels', type=int, default=3, metavar='', help='number of input channels')
@@ -50,8 +50,6 @@ parser.add_argument('--tau', type=float, default=None, metavar='', help='Tau')
 
 # ======================== Training Settings =======================================
 parser.add_argument('--cuda', type=bool, default=True, metavar='', help='run on gpu')
-parser.add_argument('--conv_first', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
-parser.add_argument('--perturb_first', type=str, default='broadcast', metavar='', help='method to apply noise in FirstLayer')
 parser.add_argument('--ngpu', type=int, default=1, metavar='', help='number of gpus to use')
 parser.add_argument('--batch-size', type=int, default=64, metavar='', help='batch size for training')
 parser.add_argument('--nepochs', type=int, default=500, metavar='', help='number of epochs to train')
@@ -60,7 +58,6 @@ parser.add_argument('--epoch-number', type=int, default=None, metavar='', help='
 parser.add_argument('--nthreads', type=int, default=20, metavar='', help='number of threads for data loading')
 parser.add_argument('--manual-seed', type=int, default=1, metavar='', help='manual seed for randomness')
 parser.add_argument('--print_freq', type=int, default=100, metavar='', help='print results every print_freq batches')
-#parser.add_argument('--port', type=int, default=8097, metavar='', help='port for visualizing training at http://localhost:port')
 
 # ======================== Hyperparameter Setings ==================================
 parser.add_argument('--optim-method', type=str, default='Adam', metavar='', help='the optimization routine ')

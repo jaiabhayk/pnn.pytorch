@@ -40,20 +40,23 @@ class Model:
         self.nblocks = args.nblocks
         self.nlayers = args.nlayers
         self.level = args.level
-        self.nchannels = args.nchannels
         self.net_type = args.net_type
         self.avgpool = args.avgpool
-        self.perturb_first = args.perturb_first
         self.nmasks = args.nmasks
+        self.first_conv = args.first_conv
 
-        if not self.perturb and args.dataset_train.startswith("CIFAR"):
-            self.conv_first = 3
-            self.avgpool = 4
-        elif not self.perturb and args.dataset_train.startswith("ImageNet"):
-            self.conv_first = 7
-            self.avgpool = 7
-        else:
-            self.conv_first = args.conv_first
+        if args.dataset_train.startswith("CIFAR"):
+            self.nclasses = 10
+            if self.first_conv < 7:
+                self.avgpool = 4
+            elif self.first_conv == 7:
+                self.avgpool = 1
+        elif args.dataset_train.startswith("ImageNet"):
+            self.nclasses = 1000
+            if self.first_conv < 7:
+                self.avgpool = 14  #TODO
+            elif self.first_conv == 7:
+                self.avgpool = 7
 
     def setup(self, checkpoints):
 
@@ -63,8 +66,7 @@ class Model:
             nclasses=self.nclasses,
             nmasks=self.nmasks,
             level=self.level,
-            conv_first=self.conv_first,
-            perturb_first=self.perturb_first,
+            first_conv=self.first_conv,
             perturb=self.perturb
         )
 
