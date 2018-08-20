@@ -35,7 +35,6 @@ class Model:
         self.cuda = args.cuda
         self.perturb = args.perturb
         self.nfilters = args.nfilters
-        self.nclasses = args.nclasses
         self.nchannels = args.nchannels
         self.nblocks = args.nblocks
         self.nlayers = args.nlayers
@@ -46,6 +45,7 @@ class Model:
         self.first_conv = args.first_conv
 
         if args.dataset_train.startswith("CIFAR"):
+            self.input_size = 32
             self.nclasses = 10
             if self.first_conv < 7:
                 self.avgpool = 4
@@ -53,6 +53,7 @@ class Model:
                 self.avgpool = 1
         elif args.dataset_train.startswith("ImageNet"):
             self.nclasses = 1000
+            self.input_size = 224
             if self.first_conv < 7:
                 self.avgpool = 14  #TODO
             elif self.first_conv == 7:

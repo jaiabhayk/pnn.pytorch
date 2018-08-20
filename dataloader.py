@@ -23,7 +23,7 @@ class Dataloader:
         self.split_train = args.split_train
         self.dataset_test_name = args.dataset_test
         self.dataset_train_name = args.dataset_train
-        self.resolution = (args.resolution_wide, args.resolution_high)
+        self.resolution = args.input_size
 
         self.input_filename_test = args.input_filename_test
         self.label_filename_test = args.label_filename_test

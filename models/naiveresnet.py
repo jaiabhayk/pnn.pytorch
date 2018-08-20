@@ -39,7 +39,7 @@ class FirstLayer(nn.Module):
             )
         else:
             self.layers = nn.Sequential(
-                nn.ReLU(True),
+                #nn.ReLU(True),      #TODO orig code uses ReLU here
                 #nn.BatchNorm2d(out_channels), #TODO: orig code uses BN here
                 nn.Conv2d(in_channels*nmasks, out_channels, kernel_size=1, stride=1, groups=1),   #TODO try groups=3
                 nn.BatchNorm2d(out_channels),
