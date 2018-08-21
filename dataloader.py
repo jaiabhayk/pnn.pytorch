@@ -1,19 +1,14 @@
 # dataloader.py
 
 import os
-import math
-
 import torch
 import datasets
-import torchvision
-import torch.utils.data
+#import torch.utils.data
 import torchvision.transforms as transforms
-
-import utils as utils
 
 class Dataloader:
 
-    def __init__(self, args):
+    def __init__(self, args, input_size):
         self.args = args
 
         self.loader_input = args.loader_input
@@ -23,7 +18,7 @@ class Dataloader:
         self.split_train = args.split_train
         self.dataset_test_name = args.dataset_test
         self.dataset_train_name = args.dataset_train
-        self.resolution = args.input_size
+        self.input_size = input_size
 
         self.input_filename_test = args.input_filename_test
         self.label_filename_test = args.label_filename_test
@@ -33,8 +28,8 @@ class Dataloader:
         if self.dataset_train_name == 'LSUN':
             self.dataset_train = getattr(datasets, self.dataset_train_name)(db_path=args.dataroot, classes=['bedroom_train'],
                 transform=transforms.Compose([
-                    transforms.Scale(self.resolution),
-                    transforms.CenterCrop(self.resolution),
+                    transforms.Scale(self.input_size),
+                    transforms.CenterCrop(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ])
@@ -43,7 +38,7 @@ class Dataloader:
         elif self.dataset_train_name == 'CIFAR10' or self.dataset_train_name == 'CIFAR100':
             self.dataset_train = getattr(datasets, self.dataset_train_name)(root=self.args.dataroot, train=True, download=True,
                 transform=transforms.Compose([
-                    transforms.RandomCrop(self.resolution, padding=4),
+                    transforms.RandomCrop(self.input_size, padding=4),
                     transforms.RandomHorizontalFlip(),
                     transforms.ToTensor(),
                     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
@@ -53,7 +48,7 @@ class Dataloader:
         elif self.dataset_train_name == 'CocoCaption' or self.dataset_train_name == 'CocoDetection':
             self.dataset_train = getattr(datasets, self.dataset_train_name)(root=self.args.dataroot, train=True, download=True,
                 transform=transforms.Compose([
-                    transforms.Scale(self.resolution),
+                    transforms.Scale(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ])
@@ -62,7 +57,7 @@ class Dataloader:
         elif self.dataset_train_name == 'STL10' or self.dataset_train_name == 'SVHN':
             self.dataset_train = getattr(datasets, self.dataset_train_name)(root=self.args.dataroot, split='train', download=True,
                 transform=transforms.Compose([
-                    transforms.Scale(self.resolution),
+                    transforms.Scale(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ])
@@ -91,7 +86,7 @@ class Dataloader:
         elif self.dataset_train_name == 'FRGC':
             self.dataset_train = datasets.ImageFolder(root=self.args.dataroot+self.args.input_filename_train,
                 transform=transforms.Compose([
-                    transforms.Scale(self.resolution),
+                    transforms.Scale(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                    ])
@@ -100,7 +95,7 @@ class Dataloader:
         elif self.dataset_train_name == 'Folder':
             self.dataset_train = datasets.ImageFolder(root=self.args.dataroot+self.args.input_filename_train,
                 transform=transforms.Compose([
-                    transforms.Scale(self.resolution),
+                    transforms.Scale(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ])
@@ -110,14 +105,14 @@ class Dataloader:
             self.dataset_train = datasets.FileList(self.input_filename_train, self.label_filename_train, self.split_train,
                 self.split_test, train=True,
                 transform_train=transforms.Compose([
-                    transforms.Scale(self.resolution),
-                    transforms.CenterCrop(self.resolution),
+                    transforms.Scale(self.input_size),
+                    transforms.CenterCrop(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ]),
                 transform_test=transforms.Compose([
-                    transforms.Scale(self.resolution),
-                    transforms.CenterCrop(self.resolution),
+                    transforms.Scale(self.input_size),
+                    transforms.CenterCrop(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ]),
@@ -129,14 +124,14 @@ class Dataloader:
             self.dataset_train = datasets.FileList(self.input_filename_train, self.label_filename_train, self.split_train,
                 self.split_test, train=True,
                 transform_train=transforms.Compose([
-                    transforms.Scale(self.resolution),
-                    transforms.CenterCrop(self.resolution),
+                    transforms.Scale(self.input_size),
+                    transforms.CenterCrop(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ]),
                 transform_test=transforms.Compose([
-                    transforms.Scale(self.resolution),
-                    transforms.CenterCrop(self.resolution),
+                    transforms.Scale(self.input_size),
+                    transforms.CenterCrop(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ]),
@@ -150,8 +145,8 @@ class Dataloader:
         if self.dataset_test_name == 'LSUN':
             self.dataset_test = getattr(datasets, self.dataset_test_name)(db_path=args.dataroot, classes=['bedroom_val'],
                 transform=transforms.Compose([
-                    transforms.Scale(self.resolution),
-                    transforms.CenterCrop(self.resolution),
+                    transforms.Scale(self.input_size),
+                    transforms.CenterCrop(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ])
@@ -168,7 +163,7 @@ class Dataloader:
         elif self.dataset_test_name == 'CocoCaption' or self.dataset_test_name == 'CocoDetection':
             self.dataset_test = getattr(datasets, self.dataset_test_name)(root=self.args.dataroot, train=False, download=True,
                 transform=transforms.Compose([
-                    transforms.Scale(self.resolution),
+                    transforms.Scale(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ])
@@ -177,7 +172,7 @@ class Dataloader:
         elif self.dataset_test_name == 'STL10' or self.dataset_test_name == 'SVHN':
             self.dataset_test = getattr(datasets, self.dataset_test_name)(root=self.args.dataroot, split='test', download=True,
                 transform=transforms.Compose([
-                    transforms.Scale(self.resolution),
+                    transforms.Scale(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ])
@@ -206,7 +201,7 @@ class Dataloader:
         elif self.dataset_test_name == 'FRGC':
             self.dataset_test = datasets.ImageFolder(root=self.args.dataroot+self.args.input_filename_test,
                 transform=transforms.Compose([
-                    transforms.Scale(self.resolution),
+                    transforms.Scale(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                    ])
@@ -215,7 +210,7 @@ class Dataloader:
         elif self.dataset_test_name == 'Folder':
             self.dataset_test = datasets.ImageFolder(root=self.args.dataroot+self.args.input_filename_test,
                 transform=transforms.Compose([
-                    transforms.Scale(self.resolution),
+                    transforms.Scale(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ])
@@ -225,8 +220,8 @@ class Dataloader:
             self.dataset_test = datasets.FileList(self.input_filename_test, self.label_filename_test, self.split_train,
                 self.split_test, train=True,
                 transform_train=transforms.Compose([
-                    transforms.Scale(self.resolution),
-                    transforms.CenterCrop(self.resolution),
+                    transforms.Scale(self.input_size),
+                    transforms.CenterCrop(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ]),
@@ -238,8 +233,8 @@ class Dataloader:
             self.dataset_test = datasets.FileList(self.input_filename_test, self.label_filename_test, self.split_train,
                 self.split_test, train=True,
                 transform_train=transforms.Compose([
-                    transforms.Scale(self.resolution),
-                    transforms.CenterCrop(self.resolution),
+                    transforms.Scale(self.input_size),
+                    transforms.CenterCrop(self.input_size),
                     transforms.ToTensor(),
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                     ]),

@@ -5,6 +5,8 @@ import copy
 import numpy as np
 from PIL import Image, ImageDraw
 from skimage.measure import compare_ssim as ssim
+import torch
+import torch.nn as nn
 
 def readtextfile(filename):
     with open(filename) as f:
@@ -34,3 +36,59 @@ def saveargs(args):
     with open(os.path.join(path,'args.txt'), 'w') as f:
         for arg in vars(args):
             f.write(arg+' '+str(getattr(args,arg))+'\n')
+
+def init_params(net):
+    for m in net.modules():
+        if isinstance(m, nn.Conv2d):
+            nn.init.kaiming_normal(m.weight, mode='fan_out')
+            if m.bias:
+                nn.init.constant(m.bias, 0)
+        elif isinstance(m, nn.BatchNorm2d):
+            nn.init.constant(m.weight, 1)
+            nn.init.constant(m.bias, 0)
+        elif isinstance(m, nn.Linear):
+            nn.init.normal(m.weight, std=1e-3)
+            if m.bias:
+                nn.init.constant(m.bias, 0)
+
+
+class Checkpoints:
+    def __init__(self, args):
+        self.dir_save = args.save
+        self.dir_load = args.resume
+
+        if os.path.isdir(self.dir_save) == False:
+            os.makedirs(self.dir_save)
+
+    def latest(self, name):
+        if name == 'resume':
+            if self.dir_load == None:
+                return None
+            else:
+                return self.dir_load
+
+    def save(self, epoch, model, best):
+        if best == True:
+            torch.save(model.state_dict(), '%s/model_epoch_%d.pth' % (self.dir_save, epoch))
+
+        return None
+
+    def load(self, filename):
+        if os.path.isfile(filename):
+            print("=> loading checkpoint '{}'".format(filename))
+            model = torch.load(filename)
+        else:
+            print("=> no checkpoint found at '{}'".format(filename))
+
+        return model
+
+
+class Counter:
+    def __init__(self):
+        self.mask_size = 0
+
+    def update(self, size):
+        self.mask_size += size
+
+    def get_total(self):
+        return self.mask_size

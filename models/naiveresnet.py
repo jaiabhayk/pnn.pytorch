@@ -4,12 +4,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from utils import Counter
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
 else:
     device = torch.device("cpu")
 
+mask_size = Counter()
 
 class FirstLayer(nn.Module):
     def __init__(self, in_channels, out_channels, nmasks, level, first_conv):
@@ -18,11 +20,12 @@ class FirstLayer(nn.Module):
         self.nmasks = nmasks    #per input channel
         self.level = level
         self.first_conv = first_conv
+
         if first_conv == 1:
             stride = 1
             padding = 0
             bias = True
-        elif first_conv == 3:
+        elif first_conv == 3 or first_conv == 5:
             stride = 1
             padding = 1
             bias = False
@@ -42,7 +45,7 @@ class FirstLayer(nn.Module):
                 #nn.ReLU(True),      #TODO orig code uses ReLU here
                 #nn.BatchNorm2d(out_channels), #TODO: orig code uses BN here
                 nn.Conv2d(in_channels*nmasks, out_channels, kernel_size=1, stride=1, groups=1),   #TODO try groups=3
-                nn.BatchNorm2d(out_channels),
+                #nn.BatchNorm2d(out_channels),
             )
 
     def forward(self, x):
@@ -54,6 +57,8 @@ class FirstLayer(nn.Module):
             if self.noise.numel() == 0:
                 self.noise.resize_(1, in_channels, self.nmasks, h, v).uniform_()  #(1, 3, 9, 32, 32)
                 self.noise = (2 * self.noise - 1) * self.level
+                mask_size.update(self.noise.numel())
+                print('Noise masks:\n{:>18}  {:6.2f}k, total: {:4.2f}M'.format(str(list(self.noise.size())), self.noise.numel() / 1000., mask_size.get_total() / 1000000.))
             y = torch.add(x.unsqueeze(2), self.noise)  # (10, 3, 1, 32, 32) + (1, 3, 9, 32, 32) --> (10, 3, 9, 32, 32)
             return self.layers(y.view(bs, in_channels * self.nmasks, h, v))  #image, perturb, relu, conv1x1, batchnorm
 
@@ -65,7 +70,7 @@ class NoiseLayer(nn.Module):
         self.level = level
         self.layers = nn.Sequential(
             nn.ReLU(True),
-            nn.BatchNorm2d(in_channels),  #NOTE paper does not use it!
+            #nn.BatchNorm2d(in_channels),  #NOTE paper does not use it!
             nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1),
             #nn.BatchNorm2d(in_channels),
         )
@@ -74,6 +79,8 @@ class NoiseLayer(nn.Module):
         if self.noise.numel() == 0:
             self.noise.resize_(x.data[0].shape).uniform_()   #fill with uniform noise
             self.noise = (2 * self.noise - 1) * self.level
+            mask_size.update(self.noise.numel())
+            print('{:>18}  {:6.2f}k, total: {:4.2f}M'.format(str(list(self.noise.size())), self.noise.numel() / 1000., mask_size.get_total() / 1000000.))
         y = torch.add(x, self.noise)
         return self.layers(y)   #input, perturb, relu, conv1x1, batchnorm
 
@@ -191,6 +198,44 @@ class ResNet(nn.Module):
         x = self.linear(x)
         return x
 
+class LeNet(nn.Module):
+    def __init__(self, nfilters=None, nclasses=None, nmasks=None, level=None, first_conv=None, perturb=None):
+        super(LeNet, self).__init__()
+        if first_conv == 5:
+            n = 4
+        else:
+            n = 7
+        self.in_channels = nmasks if nmasks else nfilters
+        self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+        self.perturb_layer = NoiseLayer
+        self.linear1 = nn.Linear(nfilters*n*n, nfilters*2)
+        self.linear2 = nn.Linear(nfilters*2, nclasses)
+        self.dropout = nn.Dropout()
+        self.relu = nn.ReLU(True)
+        if perturb:
+            self.second_layer = NoiseLayer(self.in_channels, nfilters, level)
+        else:
+            self.second_layer = nn.Conv2d(self.in_channels, nfilters, kernel_size=first_conv, stride=1, bias=False)
+
+        self.layers = nn.Sequential(
+            FirstLayer(in_channels=1, out_channels=self.in_channels, nmasks=nmasks, level=level, first_conv=first_conv),  #perturb, conv1x1, batchnorm, relu
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.ReLU(True),
+            self.second_layer,
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            nn.ReLU(True),
+        )
+
+    def forward(self, x):
+        x = self.layers(x)
+        x = x.view(x.size(0), -1)
+        x - self.dropout(x)
+        x = self.linear1(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        x = self.linear2(x)
+        return x
+
 
 def resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, first_conv=3, perturb=None):
     if perturb:
@@ -198,6 +243,10 @@ def resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, first_conv=
                        nmasks=nmasks, level=level, first_conv=first_conv)
     else:
         return ResNet(BasicBlock, [2, 2, 2, 2], nfilters=nfilters, avgpool=avgpool, nclasses=nclasses, first_conv=first_conv)
+
+def lenet(nfilters, avgpool=None, nclasses=10, nmasks=32, level=0.1, first_conv=3, perturb=None):
+    return LeNet(nfilters=nfilters, nclasses=nclasses, nmasks=nmasks, level=level, first_conv=first_conv, perturb=perturb)
+
 
 def resnet34(nfilters, level=0.1):
     return ResNet(NoiseBasicBlock, [3,4,6,3], nfilters=nfilters, level=level)

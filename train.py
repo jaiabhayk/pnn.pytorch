@@ -94,7 +94,7 @@ class Trainer():
                     input = input.cuda()
 
                 output = self.model(input)
-                loss = self.loss_fn(output,label)
+                loss = self.loss_fn(output, label)
 
                 pred = output.data.max(1)[1]
                 acc = pred.eq(label.data).cpu().sum()*100.0 / self.batch_size
