@@ -73,6 +73,10 @@ class Model:
             self.optimizer = optim.RMSprop(parameters, lr=self.lr, momentum=args.momentum, weight_decay=args.weight_decay)
         elif args.optim_method == 'SGD':
             self.optimizer = optim.SGD(parameters, lr=self.lr,  momentum=args.momentum, weight_decay=args.weight_decay, nesterov=True)
+            """
+            self.optimizer = optim.SGD([{'params': [param for name, param in self.model.named_parameters() if 'noise' not in name]},
+                                        {'params': [param for name, param in self.model.named_parameters() if 'noise' in name], 'lr': self.lr * 10},
+                                        ], lr=self.lr, momentum=args.momentum, weight_decay=args.weight_decay, nesterov=True) #"""
         else:
             raise(Exception("Unknown Optimization Method"))
 
@@ -94,23 +98,27 @@ class Model:
 
     def learning_rate(self, epoch):
         if self.dataset_train_name == 'CIFAR10':
-            return self.lr * ((0.2 ** int(epoch >= 60)) * (0.2 ** int(epoch >= 90)) * (0.2 ** int(epoch >= 120)) * (0.2 ** int(epoch >= 160)))
+            new_lr = self.lr * ((0.2 ** int(epoch >= 60)) * (0.2 ** int(epoch >= 90)) * (0.2 ** int(epoch >= 120)) * (0.2 ** int(epoch >= 160)))
         elif self.dataset_train_name == 'CIFAR100':
-            return self.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 120))* (0.1 ** int(epoch >= 160)))
+            new_lr = self.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 120))* (0.1 ** int(epoch >= 160)))
         elif self.dataset_train_name == 'MNIST':
-            return self.lr * ((0.1 ** int(epoch >= 20)) * (0.1 ** int(epoch >= 40))* (0.1 ** int(epoch >= 160)))
+            new_lr = self.lr * ((0.1 ** int(epoch >= 20)) * (0.1 ** int(epoch >= 40))* (0.1 ** int(epoch >= 160)))
         elif self.dataset_train_name == 'FRGC':
-            return self.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 120))* (0.1 ** int(epoch >= 160)))
+            new_lr = self.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 120))* (0.1 ** int(epoch >= 160)))
         elif self.dataset_train_name == 'ImageNet':
             decay = math.floor((epoch - 1) / 30)
-            return self.lr * math.pow(0.1, decay)
+            new_lr = self.lr * math.pow(0.1, decay)
+            #print('\nReducing learning rate to {}\n'.format(new_lr))
+        return new_lr
 
 
     def train(self, epoch, dataloader):
         self.model.train()
 
         lr = self.learning_rate(epoch+1)
+
         for param_group in self.optimizer.param_groups:
+            #print(param_group)
             param_group['lr'] = lr
 
         losses = []
@@ -122,7 +130,7 @@ class Model:
 
             output = self.model(input)
             loss = self.loss_fn(output, label)
-
+            #print('\nBatch:', i)
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()

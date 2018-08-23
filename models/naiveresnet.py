@@ -14,12 +14,17 @@ else:
 mask_size = Counter()
 
 class FirstLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, nmasks, level, first_conv):
+    def __init__(self, in_channels, out_channels, nmasks, level, first_conv, relu=False, shape=None):
         super(FirstLayer, self).__init__()
         self.noise = nn.Parameter(torch.Tensor(0), requires_grad=False).to(device)
+
+        #self.noise = nn.Parameter(torch.Tensor(*shape), requires_grad=False).to(device)
+        #self.noise.data.uniform_(-level, level)
+
         self.nmasks = nmasks    #per input channel
         self.level = level
         self.first_conv = first_conv
+        self.relu = relu
 
         if first_conv == 1:
             stride = 1
@@ -44,8 +49,8 @@ class FirstLayer(nn.Module):
             self.layers = nn.Sequential(
                 #nn.ReLU(True),      #TODO orig code uses ReLU here
                 #nn.BatchNorm2d(out_channels), #TODO: orig code uses BN here
-                nn.Conv2d(in_channels*nmasks, out_channels, kernel_size=1, stride=1, groups=1),   #TODO try groups=3
-                #nn.BatchNorm2d(out_channels),
+                nn.Conv2d(in_channels*nmasks, out_channels, kernel_size=1, stride=1, groups=1),   #TODO try groups=in_channels
+                nn.BatchNorm2d(out_channels),
             )
 
     def forward(self, x):
@@ -59,7 +64,16 @@ class FirstLayer(nn.Module):
                 self.noise = (2 * self.noise - 1) * self.level
                 mask_size.update(self.noise.numel())
                 print('Noise masks:\n{:>18}  {:6.2f}k, total: {:4.2f}M'.format(str(list(self.noise.size())), self.noise.numel() / 1000., mask_size.get_total() / 1000000.))
+            #print(list(x.unsqueeze(2).size()), list(self.noise.size()))
             y = torch.add(x.unsqueeze(2), self.noise)  # (10, 3, 1, 32, 32) + (1, 3, 9, 32, 32) --> (10, 3, 9, 32, 32)
+            #np.set_printoptions(precision=5, linewidth=200, threshold=1000000, suppress=True)
+            #print('\nx:', x.size(), x.data[0, 0, 0].cpu().numpy())
+            #print('x:', x.size(), x.data[1, 0, 0].cpu().numpy())
+            #print('noise:', self.noise.size(), self.noise.data[0, 0, 0, 0, :6].cpu().numpy())
+            #print('\nx+noise:', y.size(), y.data[0, 0, 0].cpu().numpy())
+            #print('x+noise:', y.size(), y.data[1, 0, 0].cpu().numpy())
+            if self.relu:
+                y = F.relu(y)
             return self.layers(y.view(bs, in_channels * self.nmasks, h, v))  #image, perturb, relu, conv1x1, batchnorm
 
 
@@ -199,31 +213,29 @@ class ResNet(nn.Module):
         return x
 
 class LeNet(nn.Module):
-    def __init__(self, nfilters=None, nclasses=None, nmasks=None, level=None, first_conv=None, perturb=None):
+    def __init__(self, nfilters=None, nclasses=None, nmasks=None, level=None, first_conv=None, linear=128):
         super(LeNet, self).__init__()
         if first_conv == 5:
-            n = 4
+            n = 5
         else:
-            n = 7
-        self.in_channels = nmasks if nmasks else nfilters
-        self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
-        self.perturb_layer = NoiseLayer
-        self.linear1 = nn.Linear(nfilters*n*n, nfilters*2)
-        self.linear2 = nn.Linear(nfilters*2, nclasses)
+            n = 2
+        self.in_channels = 1*nmasks if nmasks else nfilters
+        self.linear1 = nn.Linear(nfilters*n*n, linear)
+        self.linear2 = nn.Linear(linear, nclasses)
         self.dropout = nn.Dropout()
         self.relu = nn.ReLU(True)
-        if perturb:
-            self.second_layer = NoiseLayer(self.in_channels, nfilters, level)
-        else:
-            self.second_layer = nn.Conv2d(self.in_channels, nfilters, kernel_size=first_conv, stride=1, bias=False)
 
         self.layers = nn.Sequential(
-            FirstLayer(in_channels=1, out_channels=self.in_channels, nmasks=nmasks, level=level, first_conv=first_conv),  #perturb, conv1x1, batchnorm, relu
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            FirstLayer(in_channels=1, out_channels=nfilters, nmasks=nmasks, level=level, first_conv=first_conv, shape=(1, 1, nmasks, 28, 28)),  #perturb, conv1x1
+            nn.MaxPool2d(kernel_size=3, stride=2),
             nn.ReLU(True),
-            self.second_layer,
-            nn.MaxPool2d(kernel_size=2, stride=2),
+            #NoiseLayer(self.in_channels, nfilters, level)
+            FirstLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, first_conv=first_conv, relu=True, shape=(1, nfilters, nmasks, 14, 14)),  #perturb, conv1x1
+            nn.MaxPool2d(kernel_size=3, stride=2),
             nn.ReLU(True),
+            FirstLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, first_conv=first_conv, relu=True, shape=(1, nfilters, nmasks, 7, 7)),  #perturb, conv1x1
+            nn.MaxPool2d(kernel_size=3, stride=2), nn.ReLU(True),
+            nn.ReLU(),
         )
 
     def forward(self, x):
@@ -245,7 +257,7 @@ def resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, first_conv=
         return ResNet(BasicBlock, [2, 2, 2, 2], nfilters=nfilters, avgpool=avgpool, nclasses=nclasses, first_conv=first_conv)
 
 def lenet(nfilters, avgpool=None, nclasses=10, nmasks=32, level=0.1, first_conv=3, perturb=None):
-    return LeNet(nfilters=nfilters, nclasses=nclasses, nmasks=nmasks, level=level, first_conv=first_conv, perturb=perturb)
+    return LeNet(nfilters=nfilters, nclasses=nclasses, nmasks=nmasks, level=level, first_conv=first_conv)
 
 
 def resnet34(nfilters, level=0.1):

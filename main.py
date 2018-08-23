@@ -46,18 +46,15 @@ parser.add_argument('--nfilters', type=int, default=64, metavar='', help='number
 parser.add_argument('--nmasks', type=int, default=32, metavar='', help='number of noise masks per input channel (fan out)')
 parser.add_argument('--level', type=float, default=0.5, metavar='', help='noise level for uniform noise')
 parser.add_argument('--nunits', type=int, default=None, metavar='', help='number of units in hidden layers')
-parser.add_argument('--dropout', type=float, default=None, metavar='', help='dropout parameter')
+parser.add_argument('--dropout', type=float, default=0.5, metavar='', help='dropout parameter')
 parser.add_argument('--net-type', type=str, default='resnet18', metavar='', help='type of network')
 parser.add_argument('--length-scale', type=float, default=None, metavar='', help='length scale')
-parser.add_argument('--tau', type=float, default=None, metavar='', help='Tau')
 
 # ======================== Training Settings =======================================
 parser.add_argument('--cuda', type=bool, default=True, metavar='', help='run on gpu')
 parser.add_argument('--batch-size', type=int, default=64, metavar='', help='batch size for training')
-parser.add_argument('--nepochs', type=int, default=500, metavar='', help='number of epochs to train')
-parser.add_argument('--niters', type=int, default=None, metavar='', help='number of iterations at test time')
-parser.add_argument('--epoch-number', type=int, default=None, metavar='', help='epoch number')
-parser.add_argument('--nthreads', type=int, default=2, metavar='', help='number of threads for data loading')
+parser.add_argument('--nepochs', type=int, default=200, metavar='', help='number of epochs to train')
+parser.add_argument('--nthreads', type=int, default=4, metavar='', help='number of threads for data loading')
 parser.add_argument('--manual-seed', type=int, default=1, metavar='', help='manual seed for randomness')
 parser.add_argument('--print_freq', type=int, default=100, metavar='', help='print results every print_freq batches')
 
@@ -95,6 +92,7 @@ print('\n\nModel parameters:\n')
 for name, param in model.named_parameters():
     #if param.requires_grad:
     print('{}  {}  {}  {:.2f}M'.format(name, list(param.size()), param.requires_grad, param.numel()/1000000.))
+#print('\n\n\n\n', model.layers.0.noise)
 
 print('\n\nModel: {}, {:.2f}M parameters\n\n'.format(args.net_type, sum(p.numel() for p in model.parameters()) / 1000000.))
 
