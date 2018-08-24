@@ -38,6 +38,11 @@ feature_parser.add_argument('--perturb', dest='perturb', action='store_true')
 feature_parser.add_argument('--no-perturb', dest='perturb', action='store_false')
 parser.set_defaults(perturb=False)
 
+feature_parser = parser.add_mutually_exclusive_group(required=False)
+feature_parser.add_argument('--group', dest='group', action='store_true')
+feature_parser.add_argument('--no-group', dest='group', action='store_false')
+parser.set_defaults(group=False)
+
 parser.add_argument('--first_conv', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
 parser.add_argument('--nblocks', type=int, default=10, metavar='', help='number of blocks in each layer')
 parser.add_argument('--nlayers', type=int, default=6, metavar='', help='number of layers')
@@ -45,6 +50,7 @@ parser.add_argument('--nchannels', type=int, default=3, metavar='', help='number
 parser.add_argument('--nfilters', type=int, default=64, metavar='', help='number of filters in each layer')
 parser.add_argument('--nmasks', type=int, default=32, metavar='', help='number of noise masks per input channel (fan out)')
 parser.add_argument('--level', type=float, default=0.5, metavar='', help='noise level for uniform noise')
+parser.add_argument('--scale_noise', type=float, default=0.5, metavar='', help='noise level for uniform noise')
 parser.add_argument('--nunits', type=int, default=None, metavar='', help='number of units in hidden layers')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='', help='dropout parameter')
 parser.add_argument('--net-type', type=str, default='resnet18', metavar='', help='type of network')
@@ -73,7 +79,6 @@ torch.manual_seed(args.manual_seed)
 utils.saveargs(args)
 
 checkpoints = utils.Checkpoints(args)
-print(checkpoints)
 
 setup = Model(args, checkpoints)
 model = setup.model
@@ -107,7 +112,7 @@ for epoch in range(args.nepochs):
     tr_loss, tr_acc = train(epoch, loader_train)
     te_loss, te_acc = test(loader_test)
 
-    if te_acc > acc_best and epoch > 50:
+    if te_acc > acc_best and epoch > 18:
         print('{}  Epoch {:d}/{:d}  Train: Loss {:.2f} Accuracy {:.2f} Test: Loss {:.2f} Accuracy {:.2f} (best result, saving to {})'.format(
                         str(datetime.now())[:-7], epoch, args.nepochs, tr_loss, tr_acc, te_loss, te_acc, args.save))
         model_best = True

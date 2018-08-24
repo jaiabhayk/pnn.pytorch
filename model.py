@@ -102,7 +102,7 @@ class Model:
         elif self.dataset_train_name == 'CIFAR100':
             new_lr = self.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 120))* (0.1 ** int(epoch >= 160)))
         elif self.dataset_train_name == 'MNIST':
-            new_lr = self.lr * ((0.1 ** int(epoch >= 20)) * (0.1 ** int(epoch >= 40))* (0.1 ** int(epoch >= 160)))
+            new_lr = self.lr * ((0.2 ** int(epoch >= 30)) * (0.2 ** int(epoch >= 60))* (0.2 ** int(epoch >= 90)))
         elif self.dataset_train_name == 'FRGC':
             new_lr = self.lr * ((0.1 ** int(epoch >= 80)) * (0.1 ** int(epoch >= 120))* (0.1 ** int(epoch >= 160)))
         elif self.dataset_train_name == 'ImageNet':

@@ -14,14 +14,15 @@ else:
 mask_size = Counter()
 
 class FirstLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, nmasks, level, first_conv, relu=False, shape=None):
+    def __init__(self, in_channels, out_channels, nmasks, level, first_conv, relu=False, shape=None, mult=1, group=False):
         super(FirstLayer, self).__init__()
         self.noise = nn.Parameter(torch.Tensor(0), requires_grad=False).to(device)
 
         #self.noise = nn.Parameter(torch.Tensor(*shape), requires_grad=False).to(device)
         #self.noise.data.uniform_(-level, level)
+        self.noise = self.noise.cuda()
 
-        self.nmasks = nmasks    #per input channel
+        self.nmasks = nmasks * mult    #per input channel
         self.level = level
         self.first_conv = first_conv
         self.relu = relu
@@ -46,10 +47,14 @@ class FirstLayer(nn.Module):
                 nn.ReLU(True),  #TODO: not sure if it's needed
             )
         else:
+            if group:
+                groups = in_channels
+            else:
+                groups = 1
             self.layers = nn.Sequential(
                 #nn.ReLU(True),      #TODO orig code uses ReLU here
                 #nn.BatchNorm2d(out_channels), #TODO: orig code uses BN here
-                nn.Conv2d(in_channels*nmasks, out_channels, kernel_size=1, stride=1, groups=1),   #TODO try groups=in_channels
+                nn.Conv2d(in_channels*self.nmasks, out_channels, kernel_size=1, stride=1, groups=groups),   #TODO try groups=in_channels
                 nn.BatchNorm2d(out_channels),
             )
 
@@ -60,8 +65,9 @@ class FirstLayer(nn.Module):
             return self.layers(x)  #image, conv, batchnorm, (relu?)
         else:
             if self.noise.numel() == 0:
-                self.noise.resize_(1, in_channels, self.nmasks, h, v).uniform_()  #(1, 3, 9, 32, 32)
-                self.noise = (2 * self.noise - 1) * self.level
+                self.noise.resize_(1, in_channels, self.nmasks, h, v).normal_() * self.level  #(1, 3, 9, 32, 32)
+                #self.noise.resize_(1, in_channels, self.nmasks, h, v).uniform_()  #(1, 3, 9, 32, 32)
+                #self.noise = (2 * self.noise - 1) * self.level
                 mask_size.update(self.noise.numel())
                 print('Noise masks:\n{:>18}  {:6.2f}k, total: {:4.2f}M'.format(str(list(self.noise.size())), self.noise.numel() / 1000., mask_size.get_total() / 1000000.))
             #print(list(x.unsqueeze(2).size()), list(self.noise.size()))
@@ -213,36 +219,45 @@ class ResNet(nn.Module):
         return x
 
 class LeNet(nn.Module):
-    def __init__(self, nfilters=None, nclasses=None, nmasks=None, level=None, first_conv=None, linear=128):
+    def __init__(self, nfilters=None, nclasses=None, nmasks=None, level=None, first_conv=None, linear=128, group=False, scale_noise=1):
         super(LeNet, self).__init__()
         if first_conv == 5:
             n = 5
         else:
-            n = 2
+            n = 4
         self.in_channels = 1*nmasks if nmasks else nfilters
         self.linear1 = nn.Linear(nfilters*n*n, linear)
         self.linear2 = nn.Linear(linear, nclasses)
         self.dropout = nn.Dropout()
         self.relu = nn.ReLU(True)
+        self.batch_norm = nn.BatchNorm1d(linear)
 
         self.layers = nn.Sequential(
-            FirstLayer(in_channels=1, out_channels=nfilters, nmasks=nmasks, level=level, first_conv=first_conv, shape=(1, 1, nmasks, 28, 28)),  #perturb, conv1x1
-            nn.MaxPool2d(kernel_size=3, stride=2),
+            FirstLayer(in_channels=1, out_channels=nfilters, nmasks=nmasks, level=level*scale_noise, first_conv=first_conv, shape=(1, 1, nmasks, 28, 28), mult=nfilters, group=group),  #perturb, conv1x1
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
+            #nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
+            #nn.AvgPool2d(2, 2, 0),
             nn.ReLU(True),
             #NoiseLayer(self.in_channels, nfilters, level)
-            FirstLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, first_conv=first_conv, relu=True, shape=(1, nfilters, nmasks, 14, 14)),  #perturb, conv1x1
-            nn.MaxPool2d(kernel_size=3, stride=2),
+            FirstLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, first_conv=first_conv, relu=True, shape=(1, nfilters, nmasks, 14, 14), group=group),  #perturb, conv1x1
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
+            #nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
+            #nn.AvgPool2d(2, 2, 0),
             nn.ReLU(True),
-            FirstLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, first_conv=first_conv, relu=True, shape=(1, nfilters, nmasks, 7, 7)),  #perturb, conv1x1
-            nn.MaxPool2d(kernel_size=3, stride=2), nn.ReLU(True),
+            FirstLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, first_conv=first_conv, relu=True, shape=(1, nfilters, nmasks, 7, 7), group=group),  #perturb, conv1x1
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
+            #nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
+            #nn.AvgPool2d(2, 2, 1),
             nn.ReLU(),
         )
 
     def forward(self, x):
         x = self.layers(x)
+        #print(list(x.size()))
         x = x.view(x.size(0), -1)
         x - self.dropout(x)
         x = self.linear1(x)
+        x = self.batch_norm(x)
         x = self.relu(x)
         x = self.dropout(x)
         x = self.linear2(x)
@@ -256,8 +271,8 @@ def resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, first_conv=
     else:
         return ResNet(BasicBlock, [2, 2, 2, 2], nfilters=nfilters, avgpool=avgpool, nclasses=nclasses, first_conv=first_conv)
 
-def lenet(nfilters, avgpool=None, nclasses=10, nmasks=32, level=0.1, first_conv=3, perturb=None):
-    return LeNet(nfilters=nfilters, nclasses=nclasses, nmasks=nmasks, level=level, first_conv=first_conv)
+def lenet(nfilters, avgpool=None, nclasses=10, nmasks=32, level=0.1, first_conv=3, perturb=None, group=False, scale_noise=1):
+    return LeNet(nfilters=nfilters, nclasses=nclasses, nmasks=nmasks, level=level, first_conv=first_conv, group=group, scale_noise=scale_noise)
 
 
 def resnet34(nfilters, level=0.1):
