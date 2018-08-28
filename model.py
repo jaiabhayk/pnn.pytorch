@@ -10,10 +10,9 @@ import torch.optim as optim
 
 class Model:
     def __init__(self, args, checkpoints):
-        self.cuda = args.cuda
+        self.cuda = True#args.cuda
         self.lr = args.learning_rate
         self.dataset_train_name = args.dataset_train
-        self.perturb = args.perturb
         self.nfilters = args.nfilters
         self.nchannels = args.nchannels
         self.nblocks = args.nblocks
@@ -22,30 +21,36 @@ class Model:
         self.level = args.level
         self.net_type = args.net_type
         self.nmasks = args.nmasks
-        self.first_conv = args.first_conv
+        self.filter_size = args.filter_size
+        self.scale_noise = args.scale_noise
+        self.act = args.act
+        self.group = args.group
+        self.use_act = args.use_act
+        self.dropout = args.dropout
+        self.first_filter_size = args.first_filter_size
 
         if self.dataset_train_name.startswith("CIFAR"):
             self.input_size = 32
             self.nclasses = 10
-            if self.first_conv < 7:
+            if self.filter_size < 7:
                 self.avgpool = 4
-            elif self.first_conv == 7:
+            elif self.filter_size == 7:
                 self.avgpool = 1
 
         elif self.dataset_train_name.startswith("ImageNet"):
             self.nclasses = 1000
             self.input_size = 224
-            if self.first_conv < 7:
+            if self.filter_size < 7:
                 self.avgpool = 14  #TODO
-            elif self.first_conv == 7:
+            elif self.filter_size == 7:
                 self.avgpool = 7
 
         elif self.dataset_train_name.startswith("MNIST"):
             self.nclasses = 10
             self.input_size = 28
-            if self.first_conv < 7:
+            if self.filter_size < 7:
                 self.avgpool = 14  #TODO
-            elif self.first_conv == 7:
+            elif self.filter_size == 7:
                 self.avgpool = 7
 
         self.model = getattr(models, self.net_type)(
@@ -54,8 +59,13 @@ class Model:
             nclasses=self.nclasses,
             nmasks=self.nmasks,
             level=self.level,
-            first_conv=self.first_conv,
-            perturb=self.perturb
+            filter_size=self.filter_size,
+            act=self.act,
+            scale_noise=self.scale_noise,
+            group=self.group,
+            use_act=self.use_act,
+            dropout=self.dropout,
+            first_filter_size=self.first_filter_size
         )
 
         self.loss_fn = nn.CrossEntropyLoss()

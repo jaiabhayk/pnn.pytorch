@@ -34,32 +34,34 @@ parser.add_argument('--loader-label', type=str, default=None, metavar='', help='
 
 # ======================== Network Model Setings ===================================
 feature_parser = parser.add_mutually_exclusive_group(required=False)
-feature_parser.add_argument('--perturb', dest='perturb', action='store_true')
-feature_parser.add_argument('--no-perturb', dest='perturb', action='store_false')
-parser.set_defaults(perturb=False)
-
-feature_parser = parser.add_mutually_exclusive_group(required=False)
 feature_parser.add_argument('--group', dest='group', action='store_true')
 feature_parser.add_argument('--no-group', dest='group', action='store_false')
 parser.set_defaults(group=False)
 
-parser.add_argument('--first_conv', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
+feature_parser = parser.add_mutually_exclusive_group(required=False)
+feature_parser.add_argument('--use_act', dest='use_act', action='store_true')
+feature_parser.add_argument('--no-use_act', dest='use_act', action='store_false')
+parser.set_defaults(use_act=False)
+
+parser.add_argument('--filter_size', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
+parser.add_argument('--first_filter_size', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
 parser.add_argument('--nblocks', type=int, default=10, metavar='', help='number of blocks in each layer')
 parser.add_argument('--nlayers', type=int, default=6, metavar='', help='number of layers')
 parser.add_argument('--nchannels', type=int, default=3, metavar='', help='number of input channels')
 parser.add_argument('--nfilters', type=int, default=64, metavar='', help='number of filters in each layer')
 parser.add_argument('--nmasks', type=int, default=32, metavar='', help='number of noise masks per input channel (fan out)')
 parser.add_argument('--level', type=float, default=0.5, metavar='', help='noise level for uniform noise')
-parser.add_argument('--scale_noise', type=float, default=0.5, metavar='', help='noise level for uniform noise')
+parser.add_argument('--scale_noise', type=float, default=1.0, metavar='', help='noise level for uniform noise')
 parser.add_argument('--nunits', type=int, default=None, metavar='', help='number of units in hidden layers')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='', help='dropout parameter')
 parser.add_argument('--net-type', type=str, default='resnet18', metavar='', help='type of network')
 parser.add_argument('--length-scale', type=float, default=None, metavar='', help='length scale')
+parser.add_argument('--act', type=str, default='relu', metavar='', help='activation function (for both perturb and conv layers)')
 
 # ======================== Training Settings =======================================
-parser.add_argument('--cuda', type=bool, default=True, metavar='', help='run on gpu')
+#parser.add_argument('--cuda', type=bool, default=True, metavar='', help='run on gpu')
 parser.add_argument('--batch-size', type=int, default=64, metavar='', help='batch size for training')
-parser.add_argument('--nepochs', type=int, default=200, metavar='', help='number of epochs to train')
+parser.add_argument('--nepochs', type=int, default=100, metavar='', help='number of epochs to train')
 parser.add_argument('--nthreads', type=int, default=4, metavar='', help='number of threads for data loading')
 parser.add_argument('--manual-seed', type=int, default=1, metavar='', help='manual seed for randomness')
 parser.add_argument('--print_freq', type=int, default=100, metavar='', help='print results every print_freq batches')
@@ -105,6 +107,8 @@ dataloader = Dataloader(args, setup.input_size)
 loader_train, loader_test = dataloader.create()
 
 acc_best = 0
+best_epoch = 0
+
 print('\n\nTraining Model\n\n')
 for epoch in range(args.nepochs):
 
@@ -112,14 +116,17 @@ for epoch in range(args.nepochs):
     tr_loss, tr_acc = train(epoch, loader_train)
     te_loss, te_acc = test(loader_test)
 
-    if te_acc > acc_best and epoch > 18:
+    if te_acc > acc_best and epoch > 10:
         print('{}  Epoch {:d}/{:d}  Train: Loss {:.2f} Accuracy {:.2f} Test: Loss {:.2f} Accuracy {:.2f} (best result, saving to {})'.format(
                         str(datetime.now())[:-7], epoch, args.nepochs, tr_loss, tr_acc, te_loss, te_acc, args.save))
         model_best = True
         acc_best = te_acc
+        best_epoch = epoch
         checkpoints.save(epoch, model, model_best)
     else:
         if epoch == 0:
             print('\n')
         print('{}  Epoch {:d}/{:d}  Train: Loss {:.2f} Accuracy {:.2f} Test: Loss {:.2f} Accuracy {:.2f}'.format(
                                 str(datetime.now())[:-7], epoch, args.nepochs, tr_loss, tr_acc, te_loss, te_acc))
+
+print('\n\nBest Accuracy: {:.2f}  (epoch {:d})\n\n'.format(acc_best, best_epoch))
