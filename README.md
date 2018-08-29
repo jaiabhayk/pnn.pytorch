@@ -4,8 +4,11 @@ See original repo for details: https://github.com/juefeix/pnn.pytorch
 
 ## Results:
 CIFAR-10:
+
 ResNet18 (nfilters=128): 94% 
+
 PNN using ResNet18 structure (nfilters=128): 79%
+
 PNN using ResNet18 structure (nfilters=128) with the regular 3x3 convolutional first layer: 89%
 
 
