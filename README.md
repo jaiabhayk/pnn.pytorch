@@ -2,7 +2,7 @@
 This is an attempt to reproduce results in Perturbative Neural Networks paper.
 See original repo for details: https://github.com/juefeix/pnn.pytorch
 
-##Results:
+## Results:
 CIFAR-10:
 ResNet18 (nfilters=128): 94% 
 PNN using ResNet18 structure (nfilters=128): 79%
