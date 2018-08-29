@@ -3,8 +3,6 @@
 import os
 import copy
 import numpy as np
-from PIL import Image, ImageDraw
-from skimage.measure import compare_ssim as ssim
 import torch
 import torch.nn as nn
 
@@ -92,3 +90,26 @@ class Counter:
 
     def get_total(self):
         return self.mask_size
+
+
+def act_fn(act):
+    if act == 'relu':
+        act_ = nn.ReLU(inplace=False)
+    elif act == 'lrelu':
+        act_ = nn.LeakyReLU(inplace=True)
+    elif act == 'prelu':
+        act_ = nn.PReLU()
+    elif act == 'rrelu':
+        act_ = nn.RReLU(inplace=True)
+    elif act == 'elu':
+        act_ = nn.ELU(inplace=True)
+    elif act == 'selu':
+        act_ = nn.SELU(inplace=True)
+    elif act == 'tanh':
+        act_ = nn.Tanh()
+    elif act == 'sigmoid':
+        act_ = nn.Sigmoid()
+    else:
+        print('\n\nActivation function {} is not supported/understood\n\n'.format(act))
+        act_ = None
+    return act_

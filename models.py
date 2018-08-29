@@ -1,10 +1,8 @@
-# naiveresnet.py
-
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils import Counter
+from utils import Counter, act_fn
 
 if torch.cuda.is_available():
     device = torch.device("cuda")
@@ -13,42 +11,22 @@ else:
 
 mask_size = Counter()
 
-def act_fn(act):
-    if act == 'relu':
-        act_ = nn.ReLU(inplace=False)
-    elif act == 'lrelu':
-        act_ = nn.LeakyReLU(inplace=True)
-    elif act == 'prelu':
-        act_ = nn.PReLU()
-    elif act == 'rrelu':
-        act_ = nn.RReLU(inplace=True)
-    elif act == 'elu':
-        act_ = nn.ELU(inplace=True)
-    elif act == 'selu':
-        act_ = nn.SELU(inplace=True)
-    elif act == 'tanh':
-        act_ = nn.Tanh()
-    elif act == 'sigmoid':
-        act_ = nn.Sigmoid()
-    return act_
+
 
 class PerturbLayer(nn.Module):
     def __init__(self, in_channels=None, out_channels=None, nmasks=None, level=None, filter_size=None, use_act=False, shape=None, stride=1, group=False, act=None):
         super(PerturbLayer, self).__init__()
         self.noise = nn.Parameter(torch.Tensor(0), requires_grad=False).to(device)
-        #self.noise = nn.Parameter(torch.Tensor(*shape), requires_grad=False).to(device)
+        #self.noise = nn.Parameter(torch.Tensor(*shape), requires_grad=True).to(device)  #use this to learn optimal noise masks
         #self.noise.data.uniform_(-level, level)
         self.noise = self.noise.cuda()
-        #print('\n\n', nmasks, in_channels, '\n\n')
-
         self.nmasks = nmasks    #per input channel
         self.level = level
         self.filter_size = filter_size
         self.use_act = use_act
         self.act = act_fn(act)
-        self.group = group
 
-        print('act {}, use_act {}, level {}, nmasks {}, filter_size {}, group {}:'.format(self.act, self.use_act, self.level, self.nmasks, self.filter_size, self.group))
+        print('act {}, use_act {}, level {}, nmasks {}, filter_size {}, group {}:'.format(self.act, self.use_act, self.level, self.nmasks, self.filter_size, group))
 
         if filter_size == 1:
             padding = 0
@@ -68,7 +46,7 @@ class PerturbLayer(nn.Module):
                 act_fn(act)
             )
         else:
-            if self.group:
+            if group:
                 groups = in_channels
             else:
                 groups = 1
@@ -81,11 +59,10 @@ class PerturbLayer(nn.Module):
             )
 
     def forward(self, x):
-        bs, in_channels, h, v = list(x.size())
-
         if self.filter_size > 0:
             return self.layers(x)  #image, conv, batchnorm, (relu?)
         else:
+            bs, in_channels, h, v = list(x.size())
             if self.noise.numel() == 0:
                 #self.noise.resize_(1, in_channels, self.nmasks, h, v).normal_()  #(1, 3, 128, 32, 32)
                 #self.noise = self.noise * self.level
@@ -95,13 +72,7 @@ class PerturbLayer(nn.Module):
                 print('Noise mask {:>20}  {:6.2f}k, total: {:4.2f}M'.format(str(list(self.noise.size())), self.noise.numel() / 1000., mask_size.get_total() / 1000000.))
 
             y = torch.add(x.unsqueeze(2), self.noise)  # (10, 3, 1, 32, 32) + (1, 3, 128, 32, 32) --> (10, 3, 128, 32, 32)
-            #print(list(x.unsqueeze(2).size()), list(self.noise.size()), list(y.size()))
-            #np.set_printoptions(precision=5, linewidth=200, threshold=1000000, suppress=True)
-            #print('\nx:', x.size(), x.data[0, 0, 0].cpu().numpy())
-            #print('x:', x.size(), x.data[1, 0, 0].cpu().numpy())
-            #print('noise:', self.noise.size(), self.noise.data[0, 0, 0, 0, :6].cpu().numpy())
-            #print('\nx+noise:', y.size(), y.data[0, 0, 0].cpu().numpy())
-            #print('x+noise:', y.size(), y.data[1, 0, 0].cpu().numpy())
+
             if self.use_act:
                 y = self.act(y)
             y = y.view(bs, in_channels * self.nmasks, h, v)
@@ -202,18 +173,18 @@ class LeNet(nn.Module):
 
         print('\n\nscale_noise:', scale_noise, '\n\n')
         self.first_layers = nn.Sequential(
-            PerturbLayer(in_channels=1, out_channels=nfilters, nmasks=nmasks*nfilters, level=level*scale_noise, filter_size=first_filter_size, use_act=use_act,
-                                        shape=(1, 1, nmasks, 28, 28), group=group, act=self.act),  #perturb, conv1x1
+            PerturbLayer(in_channels=1, out_channels=nfilters, nmasks=nmasks*nfilters, level=level*scale_noise, filter_size=first_filter_size,
+                                        use_act=use_act, shape=(1, 1, nmasks, 28, 28), group=group, act=self.act),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             #nn.MaxPool2d(2, 2, 0),
             #nn.AvgPool2d(2, 2, 0),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size, use_act=True,
-                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=self.act),  #perturb, conv1x1
+                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=self.act),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             #nn.MaxPool2d(2, 2, 0),
             #nn.AvgPool2d(2, 2, 0),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size, use_act=True,
-                                        shape=(1, nfilters, nmasks, 7, 7), group=group, act=self.act),  #perturb, conv1x1
+                                        shape=(1, nfilters, nmasks, 7, 7), group=group, act=self.act),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             #nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #nn.AvgPool2d(2, 2, 1),
@@ -254,23 +225,23 @@ class CifarNet(nn.Module):
         print('\n\nscale_noise:', scale_noise, '\n\n')
         self.first_layers = nn.Sequential(
             PerturbLayer(in_channels=3, out_channels=nfilters, nmasks=nmasks*nfilters, level=level*scale_noise, filter_size=first_filter_size, use_act=use_act,
-                                        shape=(1, 1, nmasks, 28, 28), group=group, act=self.act),  #perturb, conv1x1
+                                        shape=(1, 1, nmasks, 28, 28), group=group, act=self.act),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size, use_act=True,
-                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=self.act),  #perturb, conv1x1
+                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=self.act),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             #nn.MaxPool2d(2, 2, 0),
             #nn.AvgPool2d(2, 2, 0),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size, use_act=True,
-                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=self.act),  #perturb, conv1x1
+                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=self.act),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size, use_act=True,
-                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=self.act),  #perturb, conv1x1
+                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=self.act),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             #nn.MaxPool2d(2, 2, 0),
             #nn.AvgPool2d(2, 2, 0),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size, use_act=True,
-                                        shape=(1, nfilters, nmasks, 7, 7), group=group, act=self.act),  #perturb, conv1x1
+                                        shape=(1, nfilters, nmasks, 7, 7), group=group, act=self.act),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size, use_act=True,
-                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=self.act),  #perturb, conv1x1
+                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=self.act),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             #nn.MaxPool2d(kernel_size=2, stride=2, padding=1),
             #nn.AvgPool2d(2, 2, 1),
