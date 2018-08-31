@@ -3,6 +3,7 @@
 import os
 import copy
 import numpy as np
+import math
 import torch
 import torch.nn as nn
 
@@ -49,6 +50,13 @@ def init_params(net):
             if m.bias:
                 nn.init.constant(m.bias, 0)
 
+def weights_init(m):
+    if isinstance(m, nn.Conv2d):
+        n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+        m.weight.data.normal_(0, math.sqrt(2. / n))
+    elif isinstance(m, nn.BatchNorm2d):
+        m.weight.data.fill_(1)
+        m.bias.data.zero_()
 
 class Checkpoints:
     def __init__(self, args):
@@ -73,7 +81,7 @@ class Checkpoints:
 
     def load(self, filename):
         if os.path.isfile(filename):
-            print("=> loading checkpoint '{}'".format(filename))
+            #print("=> loading checkpoint '{}'".format(filename))
             model = torch.load(filename)
         else:
             print("=> no checkpoint found at '{}'".format(filename))

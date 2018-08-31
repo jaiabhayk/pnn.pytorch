@@ -45,13 +45,18 @@ feature_parser.add_argument('--use_act', dest='use_act', action='store_true')
 feature_parser.add_argument('--no-use_act', dest='use_act', action='store_false')
 parser.set_defaults(use_act=False)
 
+feature_parser = parser.add_mutually_exclusive_group(required=False)
+feature_parser.add_argument('--unique_masks', dest='unique_masks', action='store_true')
+feature_parser.add_argument('--no-unique_masks', dest='unique_masks', action='store_false')
+parser.set_defaults(use_act=False)
+
 parser.add_argument('--filter_size', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
 parser.add_argument('--first_filter_size', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
 parser.add_argument('--nblocks', type=int, default=10, metavar='', help='number of blocks in each layer')
 parser.add_argument('--nlayers', type=int, default=6, metavar='', help='number of layers')
 parser.add_argument('--nchannels', type=int, default=3, metavar='', help='number of input channels')
 parser.add_argument('--nfilters', type=int, default=64, metavar='', help='number of filters in each layer')
-parser.add_argument('--nmasks', type=int, default=32, metavar='', help='number of noise masks per input channel (fan out)')
+parser.add_argument('--nmasks', type=int, default=1, metavar='', help='number of noise masks per input channel (fan out)')
 parser.add_argument('--level', type=float, default=0.5, metavar='', help='noise level for uniform noise')
 parser.add_argument('--scale_noise', type=float, default=1.0, metavar='', help='noise level for uniform noise')
 parser.add_argument('--nunits', type=int, default=None, metavar='', help='number of units in hidden layers')
@@ -62,7 +67,7 @@ parser.add_argument('--act', type=str, default='relu', metavar='', help='activat
 
 # ======================== Training Settings =======================================
 parser.add_argument('--batch-size', type=int, default=64, metavar='', help='batch size for training')
-parser.add_argument('--nepochs', type=int, default=100, metavar='', help='number of epochs to train')
+parser.add_argument('--nepochs', type=int, default=150, metavar='', help='number of epochs to train')
 parser.add_argument('--nthreads', type=int, default=4, metavar='', help='number of threads for data loading')
 parser.add_argument('--manual-seed', type=int, default=1, metavar='', help='manual seed for randomness')
 parser.add_argument('--print_freq', type=int, default=100, metavar='', help='print results every print_freq batches')
@@ -95,6 +100,7 @@ class Model:
         self.level = args.level
         self.net_type = args.net_type
         self.nmasks = args.nmasks
+        self.unique_masks = args.unique_masks
         self.filter_size = args.filter_size
         self.scale_noise = args.scale_noise
         self.act = args.act
@@ -132,6 +138,7 @@ class Model:
             avgpool=self.avgpool,
             nclasses=self.nclasses,
             nmasks=self.nmasks,
+            unique_masks=self.unique_masks,
             level=self.level,
             filter_size=self.filter_size,
             act=self.act,
@@ -148,11 +155,11 @@ class Model:
             self.model = self.model.cuda()
             self.loss_fn = self.loss_fn.cuda()
 
-        self.initialize_model(checkpoints)
+        #self.initialize_model(checkpoints)
 
         parameters = filter(lambda p: p.requires_grad, self.model.parameters())
         if args.optim_method == 'Adam':
-            self.optimizer = optim.Adam(parameters, lr=self.lr, betas=(args.adam_beta1, args.adam_beta2), weight_decay=args.weight_decay)
+            self.optimizer = optim.Adam(parameters, lr=self.lr, betas=(args.adam_beta1, args.adam_beta2), weight_decay=args.weight_decay)  #increase weight decay for no-noise large models
         elif args.optim_method == 'RMSprop':
             self.optimizer = optim.RMSprop(parameters, lr=self.lr, momentum=args.momentum, weight_decay=args.weight_decay)
         elif args.optim_method == 'SGD':
@@ -166,7 +173,7 @@ class Model:
             raise(Exception("Unknown Optimization Method"))
 
 
-    def initialize_model(self, checkpoints):
+    def initialize_model(self, checkpoints, data_loader):
         def weights_init(m):
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
@@ -178,8 +185,11 @@ class Model:
         if checkpoints.latest('resume') is None:
             self.model.apply(weights_init)
         else:
-            print('\n\nLoading model from saved checkpoint at {}\n\n'.format(checkpoints))
-            self.model.load_state_dict(checkpoints.load(checkpoints.latest('resume')))
+            print('\n\nLoading model from saved checkpoint at {}\n\n'.format(checkpoints.latest('resume')))
+            #self.model.load_state_dict(checkpoints.load(checkpoints.latest('resume')))
+            torch.load(self, checkpoints.latest('resume'))
+            te_loss, te_acc = test(data_loader)
+            print('\n\nTest: Loss {:.2f} Accuracy {:.2f}\n\n'.format(te_loss, te_acc))
 
     def learning_rate(self, epoch):
         if self.dataset_train_name == 'CIFAR10':
@@ -253,9 +263,27 @@ class Model:
 checkpoints = utils.Checkpoints(args)
 
 setup = Model(args, checkpoints)
+
+dataloader = Dataloader(args, setup.input_size)
+loader_train, loader_test = dataloader.create()
+
 model = setup.model
 train = setup.train
 test = setup.test
+
+# initialize model:
+if args.resume is None:
+    model.apply(utils.weights_init)
+    init_epoch = 0
+else:
+    print('\n\nLoading model from saved checkpoint at {}\n\n'.format(args.resume))
+    #self.model.load_state_dict(checkpoints.load(checkpoints.latest('resume')))
+    torch.load(model, args.resume)
+    te_loss, te_acc = test(loader_test)
+    init_epoch = int(args.resume.split('_')[2])  # extract N from 'model_epoch_N_acc_nn.nn.pth'
+    print('\n\nRestored Model Accuracy (epoch {:d}): {:.2f}\n\n'.format(init_epoch, te_acc))
+    init_epoch += 1
+
 
 print('\n\n****** Model Configuration ******\n\n')
 for arg in vars(args):
@@ -272,14 +300,13 @@ for name, param in model.named_parameters():
 
 print('\n\nModel: {}, {:.2f}M parameters\n\n'.format(args.net_type, sum(p.numel() for p in model.parameters()) / 1000000.))
 
-dataloader = Dataloader(args, setup.input_size)
-loader_train, loader_test = dataloader.create()
+#setup.initialize_model(checkpoints, loader_test)
 
 acc_best = 0
 best_epoch = 0
 
 print('\n\nTraining Model\n\n')
-for epoch in range(args.nepochs):
+for epoch in range(init_epoch, args.nepochs, 1):
 
     # train for a single epoch
     tr_loss, tr_acc = train(epoch, loader_train)
@@ -292,6 +319,7 @@ for epoch in range(args.nepochs):
         acc_best = te_acc
         best_epoch = epoch
         checkpoints.save(epoch, model, model_best)
+        torch.save(model, args.save + 'model_epoch_{:d}_acc_{:.2f}'.format(epoch, te_acc))
     else:
         if epoch == 0:
             print('\n')
