@@ -200,7 +200,7 @@ class LeNet(nn.Module):
             #nn.MaxPool2d(2, 2, 0),
             #nn.AvgPool2d(2, 2, 0),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size, use_act=True,
-                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=act, unique_masks=unique_masks),
+                                        shape=(1, nfilters, nmasks, 14, 14), group=group, act=act, unique_masks=unique_masks, debug=debug),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             #nn.MaxPool2d(2, 2, 0),
             #nn.AvgPool2d(2, 2, 0),
@@ -245,9 +245,9 @@ class CifarNet(nn.Module):
 
         print('\n\nscale_noise:', scale_noise, '\n\n')
         self.first_layers = nn.Sequential(
-            PerturbLayer(in_channels=3, out_channels=nfilters, nmasks=nmasks*nfilters, level=level*scale_noise, debug=debug, unique_masks=unique_masks,
+            PerturbLayer(in_channels=3, out_channels=nfilters, nmasks=nmasks*nfilters, level=level*scale_noise, unique_masks=unique_masks,
                          filter_size=first_filter_size, use_act=use_act, shape=(1, 1, nmasks, 32, 32), group=group, act=act),
-            PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size,
+            PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size, debug=debug,
                          use_act=True, shape=(1, nfilters, nmasks, 32, 32), group=group, act=act, unique_masks=unique_masks),
             nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
             #nn.MaxPool2d(2, 2, 0),
