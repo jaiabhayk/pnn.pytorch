@@ -58,36 +58,6 @@ def weights_init(m):
         m.weight.data.fill_(1)
         m.bias.data.zero_()
 
-class Checkpoints:
-    def __init__(self, args):
-        self.dir_save = args.save
-        self.dir_load = args.resume
-
-        if os.path.isdir(self.dir_save) == False:
-            os.makedirs(self.dir_save)
-
-    def latest(self, name):
-        if name == 'resume':
-            if self.dir_load == None:
-                return None
-            else:
-                return self.dir_load
-
-    def save(self, epoch, model, best):
-        if best == True:
-            torch.save(model.state_dict(), '%s/model_epoch_%d.pth' % (self.dir_save, epoch))
-
-        return None
-
-    def load(self, filename):
-        if os.path.isfile(filename):
-            #print("=> loading checkpoint '{}'".format(filename))
-            model = torch.load(filename)
-        else:
-            print("=> no checkpoint found at '{}'".format(filename))
-
-        return model
-
 
 class Counter:
     def __init__(self):
@@ -121,3 +91,26 @@ def act_fn(act):
         print('\n\nActivation function {} is not supported/understood\n\n'.format(act))
         act_ = None
     return act_
+
+
+def print_values(x, noise, y, unique_masks, n=2):
+    np.set_printoptions(precision=2, linewidth=200, threshold=1000000, suppress=True)
+    print('\nimage: {}  image0, channel0          {}'.format(list(x.unsqueeze(2).size()), x.unsqueeze(2).data[0, 0, 0, 0, :n].cpu().numpy()))
+    print('image: {}  image0, channel1          {}'.format(list(x.unsqueeze(2).size()), x.unsqueeze(2).data[0, 1, 0, 0, :n].cpu().numpy()))
+    print('\nimage: {}  image1, channel0          {}'.format(list(x.unsqueeze(2).size()), x.unsqueeze(2).data[1, 0, 0, 0, :n].cpu().numpy()))
+    print('image: {}  image1, channel1          {}'.format(list(x.unsqueeze(2).size()), x.unsqueeze(2).data[1, 1, 0, 0, :n].cpu().numpy()))
+
+    print('\nnoise {}  channel0, mask0:           {}'.format(list(noise.size()), noise.data[0, 0, 0, 0, :n].cpu().numpy()))
+    print('noise {}  channel0, mask1:           {}'.format(list(noise.size()), noise.data[0, 0, 1, 0, :n].cpu().numpy()))
+    if unique_masks:
+        print('\nnoise {}  channel1, mask0:           {}'.format(list(noise.size()), noise.data[0, 1, 0, 0, :n].cpu().numpy()))
+        print('noise {}  channel1, mask1:           {}'.format(list(noise.size()), noise.data[0, 1, 1, 0, :n].cpu().numpy()))
+
+    print('\nmasks: {} image0, channel0, mask0:  {}'.format(list(y.size()), y.data[0, 0, 0, 0, :n].cpu().numpy()))
+    print('masks: {} image0, channel0, mask1:  {}'.format(list(y.size()), y.data[0, 0, 1, 0, :n].cpu().numpy()))
+    print('masks: {} image0, channel1, mask0:  {}'.format(list(y.size()), y.data[0, 1, 0, 0, :n].cpu().numpy()))
+    print('masks: {} image0, channel1, mask1:  {}'.format(list(y.size()), y.data[0, 1, 1, 0, :n].cpu().numpy()))
+    print('\nmasks: {} image1, channel0, mask0:  {}'.format(list(y.size()), y.data[1, 0, 0, 0, :n].cpu().numpy()))
+    print('masks: {} image1, channel0, mask1:  {}'.format(list(y.size()), y.data[1, 0, 1, 0, :n].cpu().numpy()))
+    print('masks: {} image1, channel1, mask0:  {}'.format(list(y.size()), y.data[1, 1, 0, 0, :n].cpu().numpy()))
+    print('masks: {} image1, channel1, mask1:  {}'.format(list(y.size()), y.data[1, 1, 1, 0, :n].cpu().numpy()))

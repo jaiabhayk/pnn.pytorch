@@ -48,7 +48,12 @@ parser.set_defaults(use_act=False)
 feature_parser = parser.add_mutually_exclusive_group(required=False)
 feature_parser.add_argument('--unique_masks', dest='unique_masks', action='store_true')
 feature_parser.add_argument('--no-unique_masks', dest='unique_masks', action='store_false')
-parser.set_defaults(use_act=False)
+parser.set_defaults(unique_masks=False)
+
+feature_parser = parser.add_mutually_exclusive_group(required=False)
+feature_parser.add_argument('--debug', dest='debug', action='store_true')
+feature_parser.add_argument('--no-debug', dest='debug', action='store_false')
+parser.set_defaults(debug=False)
 
 parser.add_argument('--filter_size', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
 parser.add_argument('--first_filter_size', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
@@ -88,7 +93,7 @@ utils.saveargs(args)
 
 
 class Model:
-    def __init__(self, args, checkpoints):
+    def __init__(self, args):
         self.cuda = True#args.cuda
         self.lr = args.learning_rate
         self.dataset_train_name = args.dataset_train
@@ -108,6 +113,7 @@ class Model:
         self.use_act = args.use_act
         self.dropout = args.dropout
         self.first_filter_size = args.first_filter_size
+        self.debug = args.debug
 
         if self.dataset_train_name.startswith("CIFAR"):
             self.input_size = 32
@@ -146,7 +152,8 @@ class Model:
             group=self.group,
             use_act=self.use_act,
             dropout=self.dropout,
-            first_filter_size=self.first_filter_size
+            first_filter_size=self.first_filter_size,
+            debug=self.debug
         )
 
         self.loss_fn = nn.CrossEntropyLoss()
@@ -154,8 +161,6 @@ class Model:
         if self.cuda:
             self.model = self.model.cuda()
             self.loss_fn = self.loss_fn.cuda()
-
-        #self.initialize_model(checkpoints)
 
         parameters = filter(lambda p: p.requires_grad, self.model.parameters())
         if args.optim_method == 'Adam':
@@ -172,24 +177,6 @@ class Model:
         else:
             raise(Exception("Unknown Optimization Method"))
 
-
-    def initialize_model(self, checkpoints, data_loader):
-        def weights_init(m):
-            if isinstance(m, nn.Conv2d):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
-
-        if checkpoints.latest('resume') is None:
-            self.model.apply(weights_init)
-        else:
-            print('\n\nLoading model from saved checkpoint at {}\n\n'.format(checkpoints.latest('resume')))
-            #self.model.load_state_dict(checkpoints.load(checkpoints.latest('resume')))
-            torch.load(self, checkpoints.latest('resume'))
-            te_loss, te_acc = test(data_loader)
-            print('\n\nTest: Loss {:.2f} Accuracy {:.2f}\n\n'.format(te_loss, te_acc))
 
     def learning_rate(self, epoch):
         if self.dataset_train_name == 'CIFAR10':
@@ -225,7 +212,8 @@ class Model:
 
             output = self.model(input)
             loss = self.loss_fn(output, label)
-            #print('\nBatch:', i)
+            if self.debug:
+                print('\nBatch:', i)
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -259,29 +247,34 @@ class Model:
 
         return np.mean(losses), np.mean(accuracies)
 
-
-checkpoints = utils.Checkpoints(args)
-
-setup = Model(args, checkpoints)
-
+setup = Model(args)
 dataloader = Dataloader(args, setup.input_size)
 loader_train, loader_test = dataloader.create()
 
-model = setup.model
-train = setup.train
-test = setup.test
-
 # initialize model:
 if args.resume is None:
+    model = setup.model
     model.apply(utils.weights_init)
+    train = setup.train
+    test = setup.test
     init_epoch = 0
+    acc_best = 0
+    best_epoch = 0
+    if os.path.isdir(args.save) == False:
+        os.makedirs(args.save)
 else:
     print('\n\nLoading model from saved checkpoint at {}\n\n'.format(args.resume))
     #self.model.load_state_dict(checkpoints.load(checkpoints.latest('resume')))
-    torch.load(model, args.resume)
+    setup.model = torch.load(args.resume)
+    model = setup.model
+    train = setup.train
+    test = setup.test
     te_loss, te_acc = test(loader_test)
-    init_epoch = int(args.resume.split('_')[2])  # extract N from 'model_epoch_N_acc_nn.nn.pth'
+    init_epoch = int(args.resume.split('_')[3])  # extract N from 'results/xxx_xxx/Save/model_epoch_N_acc_nn.nn.pth'
     print('\n\nRestored Model Accuracy (epoch {:d}): {:.2f}\n\n'.format(init_epoch, te_acc))
+    acc_best = te_acc
+    best_epoch = init_epoch
+    args.save = '/'.join(args.resume.split('/')[:-1])
     init_epoch += 1
 
 
@@ -300,15 +293,10 @@ for name, param in model.named_parameters():
 
 print('\n\nModel: {}, {:.2f}M parameters\n\n'.format(args.net_type, sum(p.numel() for p in model.parameters()) / 1000000.))
 
-#setup.initialize_model(checkpoints, loader_test)
-
-acc_best = 0
-best_epoch = 0
-
 print('\n\nTraining Model\n\n')
+
 for epoch in range(init_epoch, args.nepochs, 1):
 
-    # train for a single epoch
     tr_loss, tr_acc = train(epoch, loader_train)
     te_loss, te_acc = test(loader_test)
 
@@ -318,8 +306,7 @@ for epoch in range(init_epoch, args.nepochs, 1):
         model_best = True
         acc_best = te_acc
         best_epoch = epoch
-        checkpoints.save(epoch, model, model_best)
-        torch.save(model, args.save + 'model_epoch_{:d}_acc_{:.2f}'.format(epoch, te_acc))
+        torch.save(model, args.save + '/model_epoch_{:d}_acc_{:.2f}.pth'.format(epoch, te_acc))
     else:
         if epoch == 0:
             print('\n')
