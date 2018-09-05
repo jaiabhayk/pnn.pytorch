@@ -56,6 +56,7 @@ parser.add_argument('--noise_type', type=str, default='uniform', metavar='', hel
 parser.add_argument('--dropout', type=float, default=0.5, metavar='', help='dropout parameter')
 parser.add_argument('--net-type', type=str, default='resnet18', metavar='', help='type of network')
 parser.add_argument('--act', type=str, default='relu', metavar='', help='activation function (for both perturb and conv layers)')
+parser.add_argument('--pool_type', type=str, default='max', metavar='', help='pooling function (max or avg)')
 
 # ======================== Training Settings =======================================
 parser.add_argument('--batch-size', type=int, default=64, metavar='', help='batch size for training')
@@ -90,14 +91,15 @@ class Model:
         self.nmasks = args.nmasks
         self.unique_masks = args.unique_masks
         self.filter_size = args.filter_size
+        self.first_filter_size = args.first_filter_size
         self.scale_noise = args.scale_noise
         self.noise_type = args.noise_type
         self.act = args.act
         self.use_act = args.use_act
         self.dropout = args.dropout
-        self.first_filter_size = args.first_filter_size
         self.train_masks = args.train_masks
         self.debug = args.debug
+        self.pool_type = args.pool_type
 
         if self.dataset_train_name.startswith("CIFAR"):
             self.input_size = 32
@@ -123,14 +125,16 @@ class Model:
             unique_masks=self.unique_masks,
             level=self.level,
             filter_size=self.filter_size,
+            first_filter_size=self.first_filter_size,
             act=self.act,
             scale_noise=self.scale_noise,
             noise_type=self.noise_type,
             use_act=self.use_act,
             dropout=self.dropout,
-            first_filter_size=self.first_filter_size,
             train_masks=self.train_masks,
-            debug=self.debug
+            pool_type=self.pool_type,
+            debug=self.debug,
+            input_size=self.input_size
         )
 
         self.loss_fn = nn.CrossEntropyLoss()
@@ -224,7 +228,9 @@ class Model:
 
         return np.mean(losses), np.mean(accuracies)
 
+print('\n\n****** Creating {} model ******\n\n'.format(args.net_type))
 setup = Model(args)
+print('\n\n****** Preparing {} dataset *******\n\n'.format(args.dataset_train))
 dataloader = Dataloader(args, setup.input_size)
 loader_train, loader_test = dataloader.create()
 
@@ -255,10 +261,6 @@ else:
     init_epoch += 1
 
 
-print('\n\n****** Model Configuration ******\n\n')
-for arg in vars(args):
-    print(arg, getattr(args, arg))
-
 print('\n\n****** Model Graph ******\n\n')
 for arg in vars(model):
     print(arg, getattr(model, arg))
@@ -270,12 +272,19 @@ for name, param in model.named_parameters():
 
 print('\n\nModel: {}, {:.2f}M parameters\n\n'.format(args.net_type, sum(p.numel() for p in model.parameters()) / 1000000.))
 
-if model.train_masks:
-    msg = 'also training noise masks values'
-else:
-    msg = 'moise masks are fixed'
+print('\n\n****** Model Configuration ******\n\n')
+for arg in vars(args):
+    print(arg, getattr(args, arg))
 
-print('\n\nTraining Model {}\n\n'.format(msg))
+if args.net_type != 'resnet18' and args.net_type != 'noiseresnet18' and (args.first_filter_size == 0 or args.filter_size == 0):
+    if args.train_masks:
+        msg = '(also training noise masks values)'
+    else:
+        msg = '(noise masks are fixed)'
+else:
+    msg = ''
+
+print('\n\nTraining {} model {}\n\n'.format(args.net_type, msg))
 
 for epoch in range(init_epoch, args.nepochs, 1):
 
