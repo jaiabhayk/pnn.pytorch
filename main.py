@@ -1,5 +1,3 @@
-# main.py
-
 import torch
 import random
 from dataloader import Dataloader
@@ -21,24 +19,12 @@ parser = argparse.ArgumentParser(description='Your project title goes here')
 # ======================== Data Setings ============================================
 parser.add_argument('--dataset-test', type=str, default='CIFAR10', metavar='', help='name of training dataset')
 parser.add_argument('--dataset-train', type=str, default='CIFAR10', metavar='', help='name of training dataset')
-parser.add_argument('--split_test', type=float, default=None, metavar='', help='percentage of test dataset to split')
-parser.add_argument('--split_train', type=float, default=None, metavar='', help='percentage of train dataset to split')
 parser.add_argument('--dataroot', type=str, default='./data', metavar='', help='path to the data')
 parser.add_argument('--save', type=str, default=result_path +'Save', metavar='', help='save the trained models here')
 parser.add_argument('--logs', type=str, default=result_path +'Logs', metavar='', help='save the training log files here')
 parser.add_argument('--resume', type=str, default=None, metavar='', help='full path of models to resume training')
-parser.add_argument('--input-filename-test', type=str, default=None, metavar='', help='input test filename for filelist and folderlist')
-parser.add_argument('--label-filename-test', type=str, default=None, metavar='', help='label test filename for filelist and folderlist')
-parser.add_argument('--input-filename-train', type=str, default=None, metavar='', help='input train filename for filelist and folderlist')
-parser.add_argument('--label-filename-train', type=str, default=None, metavar='', help='label train filename for filelist and folderlist')
-parser.add_argument('--loader-input', type=str, default=None, metavar='', help='input loader')
-parser.add_argument('--loader-label', type=str, default=None, metavar='', help='label loader')
 
 # ======================== Network Model Setings ===================================
-feature_parser = parser.add_mutually_exclusive_group(required=False)
-feature_parser.add_argument('--group', dest='group', action='store_true')
-feature_parser.add_argument('--no-group', dest='group', action='store_false')
-parser.set_defaults(group=False)
 
 feature_parser = parser.add_mutually_exclusive_group(required=False)
 feature_parser.add_argument('--use_act', dest='use_act', action='store_true')
@@ -48,26 +34,27 @@ parser.set_defaults(use_act=False)
 feature_parser = parser.add_mutually_exclusive_group(required=False)
 feature_parser.add_argument('--unique_masks', dest='unique_masks', action='store_true')
 feature_parser.add_argument('--no-unique_masks', dest='unique_masks', action='store_false')
-parser.set_defaults(unique_masks=False)
+parser.set_defaults(unique_masks=True)
 
 feature_parser = parser.add_mutually_exclusive_group(required=False)
 feature_parser.add_argument('--debug', dest='debug', action='store_true')
 feature_parser.add_argument('--no-debug', dest='debug', action='store_false')
 parser.set_defaults(debug=False)
 
+feature_parser = parser.add_mutually_exclusive_group(required=False)
+feature_parser.add_argument('--train_masks', dest='train_masks', action='store_true')
+feature_parser.add_argument('--no-train_masks', dest='train_masks', action='store_false')
+parser.set_defaults(train_masks=False)
+
 parser.add_argument('--filter_size', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
 parser.add_argument('--first_filter_size', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
-parser.add_argument('--nblocks', type=int, default=10, metavar='', help='number of blocks in each layer')
-parser.add_argument('--nlayers', type=int, default=6, metavar='', help='number of layers')
-parser.add_argument('--nchannels', type=int, default=3, metavar='', help='number of input channels')
 parser.add_argument('--nfilters', type=int, default=64, metavar='', help='number of filters in each layer')
 parser.add_argument('--nmasks', type=int, default=1, metavar='', help='number of noise masks per input channel (fan out)')
 parser.add_argument('--level', type=float, default=0.5, metavar='', help='noise level for uniform noise')
 parser.add_argument('--scale_noise', type=float, default=1.0, metavar='', help='noise level for uniform noise')
-parser.add_argument('--nunits', type=int, default=None, metavar='', help='number of units in hidden layers')
+parser.add_argument('--noise_type', type=str, default='uniform', metavar='', help='type of noise')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='', help='dropout parameter')
 parser.add_argument('--net-type', type=str, default='resnet18', metavar='', help='type of network')
-parser.add_argument('--length-scale', type=float, default=None, metavar='', help='length scale')
 parser.add_argument('--act', type=str, default='relu', metavar='', help='activation function (for both perturb and conv layers)')
 
 # ======================== Training Settings =======================================
@@ -75,7 +62,6 @@ parser.add_argument('--batch-size', type=int, default=64, metavar='', help='batc
 parser.add_argument('--nepochs', type=int, default=150, metavar='', help='number of epochs to train')
 parser.add_argument('--nthreads', type=int, default=4, metavar='', help='number of threads for data loading')
 parser.add_argument('--manual-seed', type=int, default=1, metavar='', help='manual seed for randomness')
-parser.add_argument('--print_freq', type=int, default=100, metavar='', help='print results every print_freq batches')
 
 # ======================== Hyperparameter Setings ==================================
 parser.add_argument('--optim-method', type=str, default='SGD', metavar='', help='the optimization routine ')
@@ -94,13 +80,10 @@ utils.saveargs(args)
 
 class Model:
     def __init__(self, args):
-        self.cuda = True#args.cuda
+        self.cuda = torch.cuda.is_available()
         self.lr = args.learning_rate
         self.dataset_train_name = args.dataset_train
         self.nfilters = args.nfilters
-        self.nchannels = args.nchannels
-        self.nblocks = args.nblocks
-        self.nlayers = args.nlayers
         self.batch_size = args.batch_size
         self.level = args.level
         self.net_type = args.net_type
@@ -108,11 +91,12 @@ class Model:
         self.unique_masks = args.unique_masks
         self.filter_size = args.filter_size
         self.scale_noise = args.scale_noise
+        self.noise_type = args.noise_type
         self.act = args.act
-        self.group = args.group
         self.use_act = args.use_act
         self.dropout = args.dropout
         self.first_filter_size = args.first_filter_size
+        self.train_masks = args.train_masks
         self.debug = args.debug
 
         if self.dataset_train_name.startswith("CIFAR"):
@@ -122,14 +106,6 @@ class Model:
                 self.avgpool = 4
             elif self.filter_size == 7:
                 self.avgpool = 1
-
-        elif self.dataset_train_name.startswith("ImageNet"):
-            self.nclasses = 1000
-            self.input_size = 224
-            if self.filter_size < 7:
-                self.avgpool = 14  #TODO
-            elif self.filter_size == 7:
-                self.avgpool = 7
 
         elif self.dataset_train_name.startswith("MNIST"):
             self.nclasses = 10
@@ -149,10 +125,11 @@ class Model:
             filter_size=self.filter_size,
             act=self.act,
             scale_noise=self.scale_noise,
-            group=self.group,
+            noise_type=self.noise_type,
             use_act=self.use_act,
             dropout=self.dropout,
             first_filter_size=self.first_filter_size,
+            train_masks=self.train_masks,
             debug=self.debug
         )
 
@@ -293,7 +270,12 @@ for name, param in model.named_parameters():
 
 print('\n\nModel: {}, {:.2f}M parameters\n\n'.format(args.net_type, sum(p.numel() for p in model.parameters()) / 1000000.))
 
-print('\n\nTraining Model\n\n')
+if model.train_masks:
+    msg = 'also training noise masks values'
+else:
+    msg = 'moise masks are fixed'
+
+print('\n\nTraining Model {}\n\n'.format(msg))
 
 for epoch in range(init_epoch, args.nepochs, 1):
 

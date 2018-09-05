@@ -11,19 +11,9 @@ class Dataloader:
     def __init__(self, args, input_size):
         self.args = args
 
-        self.loader_input = args.loader_input
-        self.loader_label = args.loader_label
-
-        self.split_test = args.split_test
-        self.split_train = args.split_train
         self.dataset_test_name = args.dataset_test
         self.dataset_train_name = args.dataset_train
         self.input_size = input_size
-
-        self.input_filename_test = args.input_filename_test
-        self.label_filename_test = args.label_filename_test
-        self.input_filename_train = args.input_filename_train
-        self.label_filename_train = args.label_filename_train
 
         if self.dataset_train_name == 'LSUN':
             self.dataset_train = getattr(datasets, self.dataset_train_name)(db_path=args.dataroot, classes=['bedroom_train'],

@@ -1,5 +1,3 @@
-# utils.py
-
 import os
 import copy
 import numpy as np
