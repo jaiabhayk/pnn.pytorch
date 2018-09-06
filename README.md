@@ -7,7 +7,7 @@ The original implementation used regular convolutions in the first layer, and th
 
 However, the biggest issue with the original implementation is that test accuracy was calculated incorrectly. Instead of the usual method of calculating ratio of correct samples to total samples in the test dataset, the authors calculated accuracy on per batch basis, and applied smoothing weight (test_accuracy = 0.7 * prev_batch_accuracy + 0.3 * current_batch_accuracy). 
 
-Here's how [this method](https://github.com/juefeix/pnn.pytorch/blob/master/plugins/monitor.py#L31) (reported) compares to the [proper accuracy calculation](https://github.com/michaelklachko/pnn.pytorch/blob/master/main.py#L225-L229) (actual):
+Here's how [this method](https://github.com/juefeix/pnn.pytorch/blob/master/plugins/monitor.py#L31) (reported) compares to the [proper accuracy calculation](https://github.com/michaelklachko/pnn.pytorch/blob/master/main.py#L226-L230) (actual):
 
 ![img](https://s15.postimg.cc/vta2ku9nv/image.png)
 
@@ -16,7 +16,7 @@ For this model run (noiseresnet18 on CIFAR10), the code in original repo would r
 After correcting this issue, I ran large number of experiments trying to see if perturbing input with noise masks would provide any benefit, and my conclusion is that it does not. 
 
 ## Implementation details
-Most of the modifications are contained in the [PerturbLayer class.](https://github.com/michaelklachko/pnn.pytorch/blob/master/models.py#L17) Here are the main changes from the original code:
+Most of the modifications are contained in the [PerturbLayer class.](https://github.com/michaelklachko/pnn.pytorch/blob/master/models.py#L15) Here are the main changes from the original code:
 
 `--first_filter_size` and `--filter_size` arguments control the type of the layer. A value of 0 turns the layer into a perturbation layer, as described in the paper. Any value n > 0 will turn the layer into a regular convolutional layer with filter size n.
 
@@ -34,7 +34,9 @@ Three different models are supported: `--net_type perturb_resnet18`, `--net_type
 CIFAR-10:
 
 1. Baseline (regular ResNet18 with 3x3 convolutions): 
-'python main.py --net-type 'resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 10 --learning-rate 1e-3'
+```
+python main.py --net-type 'resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 10 --learning-rate 1e-3
+```
 Test Accuracy: 94.2% 
 
 2. Original implementation (this is equivalent to using the code in the original repo):
@@ -43,7 +45,7 @@ python main.py --net-type 'noiseresnet18' --dataset-test 'CIFAR10' --dataset-tra
 ```
 Test Accuracy: 85.91%
 
-3. Changing first_filter_size argument to 3 improves the accuracy to 86.21%
+3. Same as above, but changing `first_filter_size` argument to 3 improves the accuracy to 86.21%
 
 4. PNN with all uniform noise in all layers (including the first layer):
 ```
@@ -81,7 +83,7 @@ python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-
 ```
 Test Accuracy: 84.4%
 
-The last two variations are the closest to what was described in the paper.
+Experiments 8 and 9 are the closest to what was described in the paper.
 
 10. Finally, I tried to train the noise masks (they are being updated each batch, at the same time as regular convolution weights):
 
