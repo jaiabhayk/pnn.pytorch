@@ -92,7 +92,7 @@ def act_fn(act):
 
 
 def print_values(x, noise, y, unique_masks, n=2):
-    np.set_printoptions(precision=2, linewidth=200, threshold=1000000, suppress=True)
+    np.set_printoptions(precision=5, linewidth=200, threshold=1000000, suppress=True)
     print('\nimage: {}  image0, channel0          {}'.format(list(x.unsqueeze(2).size()), x.unsqueeze(2).data[0, 0, 0, 0, :n].cpu().numpy()))
     print('image: {}  image0, channel1          {}'.format(list(x.unsqueeze(2).size()), x.unsqueeze(2).data[0, 1, 0, 0, :n].cpu().numpy()))
     print('\nimage: {}  image1, channel0          {}'.format(list(x.unsqueeze(2).size()), x.unsqueeze(2).data[1, 0, 0, 0, :n].cpu().numpy()))

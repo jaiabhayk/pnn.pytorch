@@ -144,6 +144,7 @@ class Model:
             self.loss_fn = self.loss_fn.cuda()
 
         parameters = filter(lambda p: p.requires_grad, self.model.parameters())
+        #parameters = self.model.parameters()
         if args.optim_method == 'Adam':
             self.optimizer = optim.Adam(parameters, lr=self.lr, betas=(args.adam_beta1, args.adam_beta2), weight_decay=args.weight_decay)  #increase weight decay for no-noise large models
         elif args.optim_method == 'RMSprop':
@@ -270,11 +271,20 @@ for name, param in model.named_parameters():
     #if param.requires_grad:
     print('{}  {}  {}  {:.2f}M'.format(name, list(param.size()), param.requires_grad, param.numel()/1000000.))
 
+print('\n\n******************** Model parameters:\n')
+for param in model.parameters():
+    #if param.requires_grad:
+    print('{} {}'.format(list(param.size()), param.requires_grad))
+
 print('\n\nModel: {}, {:.2f}M parameters\n\n'.format(args.net_type, sum(p.numel() for p in model.parameters()) / 1000000.))
 
 print('\n\n****** Model Configuration ******\n\n')
 for arg in vars(args):
     print(arg, getattr(args, arg))
+
+print('\n\n****** Model parameterrrrrs ******\n\n')
+for name, param in model.state_dict().items():
+    print('{}  {}  {}'.format(name, list(param.size()), param.requires_grad))
 
 if args.net_type != 'resnet18' and args.net_type != 'noiseresnet18' and (args.first_filter_size == 0 or args.filter_size == 0):
     if args.train_masks:

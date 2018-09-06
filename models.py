@@ -26,6 +26,96 @@ class PerturbLayer(nn.Module):
         self.use_act = use_act
         self.act = act_fn(act)
         self.debug = debug
+        self.noise_type = noise_type
+        self.in_channels = in_channels
+        self.input_size = input_size
+
+        if filter_size == 1:
+            padding = 0
+            bias = True
+        elif filter_size == 3 or filter_size == 5:
+            padding = 1
+            bias = False
+        elif filter_size == 7:
+            stride = 2
+            padding = 3
+            bias = False
+
+        if self.filter_size > 0:   #if filter_size=0, first_layer=[perturb, conv1x1] else first_layer=[convnxn], n=filter_size
+            self.layers = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=filter_size, padding=padding, stride=stride, bias=bias),
+                nn.BatchNorm2d(out_channels),
+                self.act
+            )
+        else:
+            if self.nmasks == 1 and (in_channels == 3 or in_channels == 1):  #multiple masks are mandatory in the first layer
+                self.nmasks = out_channels
+
+            # if unique and nmasks=1: first layer shape (1, 3, nfilters, 32, 32) then (1, nfilters, nmasks, 32, 32)
+            # if unique and nmasks>1: first layer shape (1, 3, nmasks, 32, 32) then (1, nfilters, nmasks, 32, 32)
+
+            # if not unique and nmasks=1: first layer shape (1, 1, nfilters, 32, 32) then (1, 1, nmasks, 32, 32)
+            # if not unique and nmasks>1: first layer shape (1, 1, nmasks, 32, 32) then (1, 1, nmasks, 32, 32)
+            noise_channels = in_channels if self.unique_masks else 1
+            shape = (1, noise_channels, self.nmasks, input_size, input_size)
+            self.noise = nn.Parameter(torch.Tensor(*shape), requires_grad=train_masks)
+            if noise_type == "uniform":
+                self.noise.data.uniform_(-1, 1)
+            elif self.noise_type == 'normal':
+                self.noise.data.normal_()
+            else:
+                print('\n\nNoise type {} is not supported / understood\n\n'.format(self.noise_type))
+
+            mask_size.update(self.noise.numel())
+            print('Noise mask {:>20}  {:6.2f}k, accum. total: {:4.2f}M'.format(
+                    str(list(self.noise.size())), self.noise.numel() / 1000., mask_size.get_total() / 1000000.))
+
+            #self.noise = self.noise.cuda()
+
+            if nmasks != 1:
+                if out_channels % in_channels != 0:
+                    print('\n\n\nnfilters must be divisible by 3 if using multiple noise masks per input channel\n\n\n')
+                groups = in_channels
+            else:
+                groups = 1
+
+            self.layers = nn.Sequential(
+                #self.act,      #TODO orig code uses ReLU here
+                #nn.BatchNorm2d(out_channels), #TODO: orig code uses BN here
+                nn.Conv2d(in_channels*self.nmasks, out_channels, kernel_size=1, stride=1, groups=groups),
+                nn.BatchNorm2d(out_channels),
+                self.act
+            )
+
+    def forward(self, x):
+        if self.filter_size > 0:
+            return self.layers(x)  #image, conv, batchnorm, (relu?)
+        else:
+            y = torch.add(x.unsqueeze(2), self.noise * self.level)  # (10, 3, 1, 32, 32) + (1, 3, 128, 32, 32) --> (10, 3, 128, 32, 32)
+
+            if self.debug:
+                print_values(x, self.noise, y, self.unique_masks)
+
+            if self.use_act:
+                y = self.act(y)
+
+            y = y.view(-1, self.in_channels * self.nmasks, self.input_size, self.input_size)
+
+            return self.layers(y)  #image, perturb, relu, conv1x1, batchnorm
+
+
+class PerturbLayer_old(nn.Module):
+    def __init__(self, in_channels=None, out_channels=None, nmasks=None, level=None, filter_size=None,
+                 debug=False, use_act=False, stride=1, act=None, unique_masks=False,
+                 train_masks=False, noise_type='uniform', input_size=None):
+        super(PerturbLayer_old, self).__init__()
+        self.nmasks = nmasks    #per input channel
+        self.unique_masks = unique_masks
+        self.level = level
+        self.filter_size = filter_size
+        self.use_act = use_act
+        self.act = act_fn(act)
+        self.debug = debug
         self.train_masks = train_masks
         self.noise_type = noise_type
 
@@ -53,7 +143,7 @@ class PerturbLayer(nn.Module):
             if self.train_masks:
                 noise_channels = in_channels if self.unique_masks else 1
                 shape = (1, noise_channels, self.nmasks, input_size, input_size)
-                self.noise = nn.Parameter(torch.Tensor(*shape), requires_grad=True).to(device)
+                self.noise = nn.Parameter(torch.Tensor(*shape), requires_grad=True)
                 if noise_type == "uniform":
                     self.noise.data.uniform_(-level, level)
                 elif self.noise_type == 'normal':
@@ -67,7 +157,9 @@ class PerturbLayer(nn.Module):
             else:
                 self.noise = nn.Parameter(torch.Tensor(0), requires_grad=False).to(device)
 
-            self.noise = self.noise.cuda()
+            #self.noise = self.noise.cuda()
+            #self.noise.requires_grad_(True)
+            #print(self.noise.grad)
 
             if nmasks != 1:
                 if out_channels % in_channels != 0:
@@ -90,6 +182,7 @@ class PerturbLayer(nn.Module):
         else:
             bs, in_channels, h, v = list(x.size())
             if self.train_masks:
+                #print(self.noise.grad.size())
                 #print(x.size())
                 pass
             else:
@@ -218,6 +311,36 @@ class PerturbResNet(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.linear(x)
         return x
+
+
+class Net(nn.Module):
+    def __init__(self, ):
+        super(Net, self).__init__()
+        self.linear = nn.Linear(9 * 6 * 6, 10)
+
+        shape = (1, 1, 28, 28)
+        #self.noise = torch.randn(*shape, device=device, dtype=torch.float, requires_grad=True)
+        #self.noise = torch.Tensor(shape)
+        #self.noise.requires_grad_(True)
+        self.noise = nn.Parameter(torch.Tensor(*shape), requires_grad=True).to(device)
+        self.noise.data.uniform_(-1, 1)
+
+        self.layers = nn.Sequential(
+            nn.Conv2d(1, 9, kernel_size=5, stride=2, bias=False),
+            nn.MaxPool2d(2, 2),
+            nn.ReLU(),
+        )
+
+    def forward(self, x):
+        print('values:', self.noise.data[0,0,0,:2].cpu().numpy())
+        print('grad:', self.noise.grad.data[0, 0, 0, :2].cpu().numpy())
+        x = torch.add(x, self.noise)
+        x = self.layers(x)
+        x = x.view(x.size(0), -1)
+        x = self.linear(x)
+        return x
+
+
 
 
 class LeNet(nn.Module):
@@ -522,6 +645,9 @@ class ResNet(nn.Module):
         out = self.linear(out)
         return out
 
+def net(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, filter_size=0, first_filter_size=0, pool_type=None, input_size=None,
+             scale_noise=1, act='relu', use_act=True, dropout=0.5, unique_masks=False, noise_type='uniform', train_masks=False, debug=False):
+    return Net()
 
 def resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, filter_size=0, first_filter_size=0, pool_type=None, input_size=None,
              scale_noise=1, act='relu', use_act=True, dropout=0.5, unique_masks=False, noise_type='uniform', train_masks=False, debug=False):
