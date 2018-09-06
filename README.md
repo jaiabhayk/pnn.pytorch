@@ -1,47 +1,94 @@
 # Perturbative Neural Networks (PNN)
 This is an attempt to reproduce results in Perturbative Neural Networks paper.
-See original repo for details: https://github.com/juefeix/pnn.pytorch
+See [original repo](https://github.com/juefeix/pnn.pytorch) for details.
 
-## Results:
-CIFAR-10:
+## Motivation
+The original implementation used regular convolutions in the first layer, and the remaining layers used fanout of 1, which means each input channel was perturbed with a single noise mask. 
 
-ResNet18 (nfilters=128): 94% 
+However, the biggest issue with the original implementation is that test accuracy was calculated incorrectly. Instead of the usual method of calculating ratio of correct samples to total samples in the test dataset, the authors calculated accuracy on per batch basis, and applied smoothing weight (test_accuracy = 0.7 * prev_batch_accuracy + 0.3 * current_batch_accuracy). 
 
-PNN using ResNet18 structure (nfilters=128): 79%
+Here's how [this method](https://github.com/juefeix/pnn.pytorch/blob/master/plugins/monitor.py#L31) (reported) compares to the [proper accuracy calculation](https://github.com/michaelklachko/pnn.pytorch/blob/master/main.py#L225-L229) (actual):
 
-PNN using ResNet18 structure (nfilters=128) with the regular 3x3 convolutional first layer: 89%
+![img](https://s15.postimg.cc/vta2ku9nv/image.png)
 
+For this model run (noiseresnet18 on CIFAR10), the code in original repo would report test accuracy 90.53%, while the actual test accuracy is 85.91%
+
+After correcting this issue, I ran large number of experiments trying to see if perturbing input with noise masks would provide any benefit, and my conclusion is that it does not. 
 
 ## Implementation details
-Three main changes from the original code:
-1. Test accuracy in the original code was calculated incorrectly. As a result, their reported accuracies are much better than they really are. 
-2. The original code used regular convolutional layer as the first layer in the model. 
-3. The original code didn't implement fanout (number of noise masks per input channel)
+Most of the modifications are contained in the [PerturbLayer class.](https://github.com/michaelklachko/pnn.pytorch/blob/master/models.py#L17) Here are the main changes from the original code:
 
-This implementation uses 3 main arguments to setup model configuration:
---first_filter_size  zero (0) value for this argument converts the first layer of the model into a perturbation layer (addition of noise masks followed by 1x1 convolution), any other value will make this layer a regular convolutional layer with this filter size. 
---filter_size same as above, used for all layers except the first one
---nmasks this value is number of noise masks per input channel, if this value is 1, there will be as many noise masks as input channels. if it is more than one, --group argument can be used to perform perturbations of each input channel independently (just like described in the paper), if no --group argument is used, nmasks*nfilters noise masks will be used in all layers except the first one. The first layer will by default apply nfilters noise masks to each input channel before applying 1x1 convolution.
---use_act controls whether to apply activation function in the first layer after the perturbation and before 1x1 convolution
+`--first_filter_size` and `--filter_size` arguments control the type of the layer. A value of 0 turns the layer into a perturbation layer, as described in the paper. Any value n > 0 will turn the layer into a regular convolutional layer with filter size n.
 
-### Training Recipes
-Pure PNN with fanout 1:
-```
-python main.py --net-type 'resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-
-rate 1e-4 --first_filter_size 0 --filter_size 0 --nmasks 1 --use_act
-```
+`--nmasks` specifies number of noise masks to apply to each input channel. This is "fanout" parameter mentioned in the paper. The original implementation used nmasks=1 hardcoded.
 
-PNN with the first layer using 3x3 convolution:
-```
-python main.py --net-type 'resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-
-rate 1e-4 --first_filter_size 3 --filter_size 0 --nmasks 1 --use_act
-```
+`--unique_masks` specifies whether to use different sets of nmasks noise masks for each input channel. --no-unique_masks forces the same set of nmasks to be used for all input channels.
 
-Regular CNN (ResNet18):
-```
-python main.py --net-type 'resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-
-rate 1e-4 --first_filter_size 3 --filter_size 3 --nmasks 1 --use_act
-```
+`--train_masks` enables treating noise masks as regular parameters, and optimizes their values during training at the same time as model weights.
 
-### Requirements
-PyTorch 0.4.1
+Other arguments allow changing noise type (uniform or normal), pooling type (max or avg), activation function (relu, rrelu, prelu, elu, selu, tanh, sigmoid), whether to apply activation function in the first layer (--use_act, immediately after perturbing the input RGB channels, this results in some information loss), whether to scale noise level in the first layer, and --debug argument prints out values of input, noise, and output for every update step to verify that noise is being applied correctly.
+
+Three different models are supported: `--net_type perturb_resnet18`, `--net_type cifarnet` (6 conv layers, followed by a fully connected layer), and `--net_type lenet` (3 conv. layers followed by a fully connected layer). In addition, I included the baseline ResNet-18 model `--net-type resnet18` taken from [here](https://github.com/kuangliu/pytorch-cifar/blob/master/models/resnet.py), and `--net_type noiseresnet18` model from the original repo. Note that `perturb_resnet18` model is flexible enough to replace both baseline and `noiseresnet18` models, using appropriate arguments.
+
+## Results
+CIFAR-10:
+
+1. Baseline (regular ResNet18 with 3x3 convolutions): 
+'python main.py --net-type 'resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 10 --learning-rate 1e-3'
+Test Accuracy: 94.2% 
+
+2. Original implementation (this is equivalent to using the code in the original repo):
+```
+python main.py --net-type 'noiseresnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 10 --learning-rate 1e-4 --first_filter_size 7
+```
+Test Accuracy: 85.91%
+
+3. Changing first_filter_size argument to 3 improves the accuracy to 86.21%
+
+4. PNN with all uniform noise in all layers (including the first layer):
+```
+python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 0 --filter_size 0 --nmasks 1 
+```
+Test Accuracy: 74.6%
+
+5. Same as above, but without any noise (this is equivalent to regular CNN with all convolutions changed to 1x1):
+```
+python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 1 --filter_size 1 
+```
+Test Accuracy: 74.3%
+
+6. PNN with noise masks in all layers except the first layer, which uses regular 3x3 convolutions:
+```
+python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 0 --nmasks 1 
+```
+Test Accuracy: 85.8%
+
+7. Same as above, but without any noise (regular CNN with all 3x3 convolutions in the first layer, and 1x1 in remaining layers):
+```
+python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 1 
+```
+Test Accuracy: 85.5%
+
+8. PNN with noise masks in all layers except the first layer, which uses regular 3x3 convolutions with fanout=64. Internally fanout is implemented with grouped 1x1 convolutions. Note --unique_masks arg, which creates unique set of masks for each input channel, in every layer:
+```
+python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 0 --nmasks 64 --unique_masks
+```
+Test Accuracy: 84.7%
+
+9. Same as above, but with --no-unique_masks argument, which means that the same set of masks is used for each input channel:
+```
+python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 0 --nmasks 64 --no-unique_masks
+```
+Test Accuracy: 84.4%
+
+The last two variations are the closest to what was described in the paper.
+
+10. Finally, I tried to train the noise masks (they are being updated each batch, at the same time as regular convolution weights):
+
+`python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 0 --nmasks 64 --no-unique_masks --train_masks`
+
+Test Accuracy: 85.9%
+
+## Conclusion
+Unfortunately, it appears that perturbing layer inputs with noise does not provide any significant benefit. Simple 1x1 convolutions without noise masks provide similar performance. No matter how we apply noise masks, the accuracy drop resulting from using 1x1 filters is severe (~5% on CIFAR-10 even when not modifying the first layer). If we modify the first layer, the accuracy drops by ~20%. 
+
