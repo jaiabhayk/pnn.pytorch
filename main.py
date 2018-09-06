@@ -144,7 +144,7 @@ class Model:
             self.loss_fn = self.loss_fn.cuda()
 
         parameters = filter(lambda p: p.requires_grad, self.model.parameters())
-        #parameters = self.model.parameters()
+
         if args.optim_method == 'Adam':
             self.optimizer = optim.Adam(parameters, lr=self.lr, betas=(args.adam_beta1, args.adam_beta2), weight_decay=args.weight_decay)  #increase weight decay for no-noise large models
         elif args.optim_method == 'RMSprop':
@@ -182,7 +182,7 @@ class Model:
         lr = self.learning_rate(epoch+1)
 
         for param_group in self.optimizer.param_groups:
-            #print(param_group)
+            #print(param_group)  #TODO figure out how to set diff learning rate to noise params if train_masks
             param_group['lr'] = lr
 
         losses = []
@@ -267,24 +267,34 @@ for arg in vars(model):
     print(arg, getattr(model, arg))
 
 print('\n\nModel parameters:\n')
+model_total = 0
 for name, param in model.named_parameters():
-    #if param.requires_grad:
-    print('{}  {}  {}  {:.2f}M'.format(name, list(param.size()), param.requires_grad, param.numel()/1000000.))
+    size = param.numel() / 1000000.
+    print('{}  {}  requires_grad: {}  size: {:.2f}M'.format(name, list(param.size()), param.requires_grad, param.numel()/1000000.))
+    model_total += size
 
+print('\n\nNoise masks:\n')
+masks_total = 0
+for name, param in [(name, param) for name, param in model.named_parameters() if 'noise' in name]:
+    size = param.numel() / 1000000.
+    print('{:>22}  size: {:.2f}M'.format(str(list(param.size())), param.numel()/1000000.))
+    masks_total += size
+
+print('\n\nModel size: {:.2f}M regular parameters, {:.2f}M noise mask values\n\n'.format(model_total - masks_total, masks_total))
+"""
 print('\n\n******************** Model parameters:\n')
 for param in model.parameters():
     #if param.requires_grad:
     print('{} {}'.format(list(param.size()), param.requires_grad))
-
-print('\n\nModel: {}, {:.2f}M parameters\n\n'.format(args.net_type, sum(p.numel() for p in model.parameters()) / 1000000.))
+    
+print('\n\n****** Model state_dict() ******\n\n')
+for name, param in model.state_dict().items():
+    print('{}  {}  {}'.format(name, list(param.size()), param.requires_grad))
+"""
 
 print('\n\n****** Model Configuration ******\n\n')
 for arg in vars(args):
     print(arg, getattr(args, arg))
-
-print('\n\n****** Model parameterrrrrs ******\n\n')
-for name, param in model.state_dict().items():
-    print('{}  {}  {}'.format(name, list(param.size()), param.requires_grad))
 
 if args.net_type != 'resnet18' and args.net_type != 'noiseresnet18' and (args.first_filter_size == 0 or args.filter_size == 0):
     if args.train_masks:
@@ -315,3 +325,13 @@ for epoch in range(init_epoch, args.nepochs, 1):
                                 str(datetime.now())[:-7], epoch, args.nepochs, tr_loss, tr_acc, te_loss, te_acc))
 
 print('\n\nBest Accuracy: {:.2f}  (epoch {:d})\n\n'.format(acc_best, best_epoch))
+
+print('\n\nReported Test Accuracies:\n\n', reported, '\n\nActual Test Accuracies:\n\n', actual, '\n\n')
+
+for v in reported:
+    print('{:.2f}'.format(v)+', ', end='')
+print('\n\n')
+
+for v in actual:
+    print(str(v)+', ', end='')
+print('\n\n')
