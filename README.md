@@ -36,7 +36,7 @@ Most of the modifications are contained in the [PerturbLayer class.](https://git
 
 Other arguments allow changing noise type (uniform or normal), pooling type (max or avg), activation function (relu, rrelu, prelu, elu, selu, tanh, sigmoid), whether to apply activation function in the first layer (--use_act, immediately after perturbing the input RGB channels, this results in some information loss), whether to scale noise level in the first layer, and --debug argument prints out values of input, noise, and output for every update step to verify that noise is being applied correctly.
 
-Three different models are supported: `--net_type perturb_resnet18`, `--net_type cifarnet` (6 conv layers, followed by a fully connected layer), and `--net_type lenet` (3 conv. layers followed by a fully connected layer). In addition, I included the baseline ResNet-18 model `--net-type resnet18` taken from [here](https://github.com/kuangliu/pytorch-cifar/blob/master/models/resnet.py), and `--net_type noiseresnet18` model from the original repo. Note that `perturb_resnet18` model is flexible enough to replace both baseline and `noiseresnet18` models, using appropriate arguments.
+Three different models are supported: `perturb_resnet18`, `cifarnet` (6 conv layers, followed by a fully connected layer), and `lenet` (3 conv. layers followed by a fully connected layer). In addition, I included the baseline ResNet-18 model `resnet18` taken from [here](https://github.com/kuangliu/pytorch-cifar/blob/master/models/resnet.py), and `noiseresnet18` model from the original repo. Note that `perturb_resnet18` model is flexible enough to replace both baseline and `noiseresnet18` models, using appropriate arguments.
 
 ## Results
 CIFAR-10:
