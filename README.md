@@ -19,20 +19,20 @@ Here's for example, the difference between ResNet18-like models: a baseline mode
 
 ![img](https://s15.postimg.cc/5jrce4zyz/image.png)
 
-The accuracy difference between regular resnet baseline and PNN remains ~5% throughout the training, and the addition of noise masks only results in less than 1% improvement over equivalently "crippled" resnet without any noise applied.
+The accuracy difference between regular resnet baseline and PNN remains ~5% throughout the training, and the addition of noise masks results in less than 1% improvement over equivalently "crippled" resnet without any noise applied.
 
 ## Implementation details
 Most of the modifications are contained in the [PerturbLayer class.](https://github.com/michaelklachko/pnn.pytorch/blob/master/models.py#L15) Here are the main changes from the original code:
 
-`--first_filter_size` and `--filter_size` arguments control the type of the layer. A value of 0 turns the layer into a perturbation layer, as described in the paper. Any value n > 0 will turn the layer into a regular convolutional layer with filter size n.
+`--first_filter_size` and `--filter_size` arguments control the type of the first layer, and the remaining layers, correspondingly. A value of 0 turns the layer into a perturbation layer, as described in the paper. Any value n > 0 will turn the layer into a regular convolutional layer with filter size n. The original implementation only supports first_filter_size=7, and filter_size=0.
 
-`--nmasks` specifies number of noise masks to apply to each input channel. This is "fanout" parameter mentioned in the paper. The original implementation used nmasks=1 hardcoded.
+`--nmasks` specifies number of noise masks to apply to each input channel. This is "fanout" parameter mentioned in the paper. The original implementation only supports nmasks=1.
 
-`--unique_masks` specifies whether to use different sets of nmasks noise masks for each input channel. --no-unique_masks forces the same set of nmasks to be used for all input channels.
+`--unique_masks` specifies whether to use different sets of `nmasks` noise masks for each input channel. `--no-unique_masks` forces the same set of nmasks to be used for all input channels.
 
 `--train_masks` enables treating noise masks as regular parameters, and optimizes their values during training at the same time as model weights.
 
-`--mix_maps` adds second 1x1 convolutional layer after perturbed input channels are combined with the first 1x1 convolution. Without this second 1x1 "mixing" layer, there is no information exchange between input channels all the way until the softmax layer in the end. Note that it's not needed when `--nmasks` is 1, because then the first 1x1 convolutional layer plays this role.
+`--mix_maps` adds second 1x1 convolutional layer after perturbed input channels are combined with the first 1x1 convolution. Without this second 1x1 "mixing" layer, there is no information exchange between input channels all the way until the softmax layer in the end. Note that it's not needed when `--nmasks` is 1, because then the first 1x1 convolutional layer already plays this role.
 
 Other arguments allow changing noise type (uniform or normal), pooling type (max or avg), activation function (relu, rrelu, prelu, elu, selu, tanh, sigmoid), whether to apply activation function in the first layer (--use_act, immediately after perturbing the input RGB channels, this results in some information loss), whether to scale noise level in the first layer, and --debug argument prints out values of input, noise, and output for every update step to verify that noise is being applied correctly.
 
