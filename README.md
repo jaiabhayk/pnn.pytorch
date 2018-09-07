@@ -5,13 +5,13 @@ See [original repo](https://github.com/juefeix/pnn.pytorch) for details.
 ## Motivation
 The original implementation used regular convolutions in the first layer, and the remaining layers used fanout of 1, which means each input channel was perturbed with a single noise mask. 
 
-However, the biggest issue with the original implementation is that test accuracy was calculated incorrectly. Instead of the usual method of calculating ratio of correct samples to total samples in the test dataset, the authors calculated accuracy on per batch basis, and applied smoothing weight (test_accuracy = 0.7 * prev_batch_accuracy + 0.3 * current_batch_accuracy). 
+However, the biggest issue with the original implementation is that test accuracy was calculated incorrectly. Instead of the usual method of calculating ratio of correct samples to total samples in the test dataset, the authors calculated accuracy on per batch basis, and applied smoothing weight (test_accuracy = 0.7 * prev_batch_accuracy + 0.3 * current_batch_accuracy).
 
 Here's how [this method](https://github.com/juefeix/pnn.pytorch/blob/master/plugins/monitor.py#L31) (reported) compares to the [proper accuracy calculation](https://github.com/michaelklachko/pnn.pytorch/blob/master/main.py#L226-L230) (actual):
 
 ![img](https://s15.postimg.cc/vta2ku9nv/image.png)
 
-For this model run (noiseresnet18 on CIFAR10), the code in original repo would report test accuracy 90.53%, while the actual test accuracy is 85.91%
+For this model run (noiseresnet18 on CIFAR10), the code in original repo would report best test accuracy 90.53%, while the actual best test accuracy is 85.91%
 
 After correcting this issue, I ran large number of experiments trying to see if perturbing input with noise masks would provide any benefit, and my conclusion is that it does not.
 
