@@ -80,7 +80,7 @@ Experiments 6 and 7 are the closest to what was described in the paper.
 `python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 0 --nmasks 64 --no-unique_masks --train_masks`
 
 ## Weakness of reasoning:
-Looking at sections 3.3 and 3.4 in the paper, in both "macro" and "micro" cases authors demonstrate how it's possible to find PNN parameters such that it would exactly or almost exactly reproduce the output of a regular CNN. One issue with that is it's only true for a single input x. So while for any given input x, PNN might be able to find the weights required to compute correct output y, it does not follow that it can find weights to do that for all input samples in the dataset.
+Sections 3.3 and 3.4 in the paper demonstrate how it's possible to find PNN parameters to reproduce the output of a regular CNN. One issue with that is it's only true for a single input x. So while for any given input x, PNN might be able to find the weights required to compute the correct output y, it does not follow that it can find weights to do that for all input samples in the dataset.
 
 Intuitively, it seems like PNN lacks the main feature extraction property of a regular CNN: it cannot directly match any spatial patterns with a filter. 
 
