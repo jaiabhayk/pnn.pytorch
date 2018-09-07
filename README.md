@@ -32,7 +32,7 @@ Most of the modifications are contained in the [PerturbLayer class.](https://git
 
 `--train_masks` enables treating noise masks as regular parameters, and optimizes their values during training at the same time as model weights.
 
-`--mix_maps` adds second 1x1 convolutional layer after perturbed input channels are combined with the first 1x1 convolution. Without this second 1x1 "mixing" layer, there is no information exchange between input channels all the way until the softmax layer in the end. Note that it's not needed when `--nmasks` is 1, because then the 1x1 convolutional layer plays this role (there's per channel no masks to combine).
+`--mix_maps` adds second 1x1 convolutional layer after perturbed input channels are combined with the first 1x1 convolution. Without this second 1x1 "mixing" layer, there is no information exchange between input channels all the way until the softmax layer in the end. Note that it's not needed when `--nmasks` is 1, because then the first 1x1 convolutional layer plays this role.
 
 Other arguments allow changing noise type (uniform or normal), pooling type (max or avg), activation function (relu, rrelu, prelu, elu, selu, tanh, sigmoid), whether to apply activation function in the first layer (--use_act, immediately after perturbing the input RGB channels, this results in some information loss), whether to scale noise level in the first layer, and --debug argument prints out values of input, noise, and output for every update step to verify that noise is being applied correctly.
 
