@@ -73,7 +73,7 @@ python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-
 python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 0 --nmasks 64 --no-unique_masks
 ```
 
-Experiments 8 and 9 are the closest to what was described in the paper.
+Experiments 6 and 7 are the closest to what was described in the paper.
 
 8. training the noise masks (updated each batch, at the same time as regular model parameters). Test Accuracy: 85.9%
 
