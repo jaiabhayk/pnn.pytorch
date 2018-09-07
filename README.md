@@ -15,7 +15,7 @@ For this model run (noiseresnet18 on CIFAR10), the code in original repo would r
 
 After correcting this issue, I ran large number of experiments trying to see if perturbing input with noise masks would provide any benefit, and my conclusion is that it does not.
 
-Here's for example, the difference between ResNet18-like models: a baseline model with reduced number of filters to keep the same parameter count, a model where all layers except first one use 1x1 convolutions only, and a model where all layers except first one perturbations followed by 1x1 convolutions. All three models have ~5.5M parameters: 
+Here's for example, the difference between ResNet18-like models: a baseline model with reduced number of filters to keep the same parameter count, a model where all layers except first one use only 1x1 convolutions (no noise), and a model where all layers except first one use perturbations followed by 1x1 convolutions. All three models have ~5.5M parameters: 
 
 ![img](https://s15.postimg.cc/5jrce4zyz/image.png)
 
