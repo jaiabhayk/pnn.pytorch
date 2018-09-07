@@ -46,6 +46,11 @@ feature_parser.add_argument('--train_masks', dest='train_masks', action='store_t
 feature_parser.add_argument('--no-train_masks', dest='train_masks', action='store_false')
 parser.set_defaults(train_masks=False)
 
+feature_parser = parser.add_mutually_exclusive_group(required=False)
+feature_parser.add_argument('--mix_maps', dest='mix_maps', action='store_true')
+feature_parser.add_argument('--no-mix_maps', dest='mix_maps', action='store_false')
+parser.set_defaults(mix_maps=False)
+
 parser.add_argument('--filter_size', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
 parser.add_argument('--first_filter_size', type=int, default=0, metavar='', help='use conv layer with this kernel size in FirstLayer')
 parser.add_argument('--nfilters', type=int, default=64, metavar='', help='number of filters in each layer')
@@ -78,7 +83,6 @@ random.seed(args.manual_seed)
 torch.manual_seed(args.manual_seed)
 utils.saveargs(args)
 
-
 class Model:
     def __init__(self, args):
         self.cuda = torch.cuda.is_available()
@@ -100,6 +104,7 @@ class Model:
         self.train_masks = args.train_masks
         self.debug = args.debug
         self.pool_type = args.pool_type
+        self.mix_maps = args.mix_maps
 
         if self.dataset_train_name.startswith("CIFAR"):
             self.input_size = 32
@@ -134,7 +139,8 @@ class Model:
             train_masks=self.train_masks,
             pool_type=self.pool_type,
             debug=self.debug,
-            input_size=self.input_size
+            input_size=self.input_size,
+            mix_maps=self.mix_maps
         )
 
         self.loss_fn = nn.CrossEntropyLoss()
@@ -306,10 +312,14 @@ else:
 
 print('\n\nTraining {} model {}\n\n'.format(args.net_type, msg))
 
+accuracies = []
+
 for epoch in range(init_epoch, args.nepochs, 1):
 
     tr_loss, tr_acc = train(epoch, loader_train)
     te_loss, te_acc = test(loader_test)
+
+    accuracies.append(te_acc)
 
     if te_acc > acc_best and epoch > 10:
         print('{}  Epoch {:d}/{:d}  Train: Loss {:.2f} Accuracy {:.2f} Test: Loss {:.2f} Accuracy {:.2f} (best result, saving to {})'.format(
@@ -326,12 +336,22 @@ for epoch in range(init_epoch, args.nepochs, 1):
 
 print('\n\nBest Accuracy: {:.2f}  (epoch {:d})\n\n'.format(acc_best, best_epoch))
 
-print('\n\nReported Test Accuracies:\n\n', reported, '\n\nActual Test Accuracies:\n\n', actual, '\n\n')
+print('\n\nTest Accuracies:\n\n')
 
-for v in reported:
+for v in accuracies:
     print('{:.2f}'.format(v)+', ', end='')
 print('\n\n')
 
-for v in actual:
-    print(str(v)+', ', end='')
-print('\n\n')
+plot = False
+if plot:
+    import matplotlib.pyplot as plt
+    plt.plot(range(args.nepochs), accuracies, 'black', label='model_1')
+    plt.plot(range(args.nepochs), accuracies, 'red', label='model_2')
+    plt.plot(range(args.nepochs), accuracies, 'blue', label='model_3')
+    plt.title('Test Accuracy (CIFAR-10)', fontsize=18)
+    plt.xlabel('Epochs', fontsize=16)
+    plt.ylabel('%', fontsize=16)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    plt.legend(loc='center right', prop={'size': 14})
+    plt.show()

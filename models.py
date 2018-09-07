@@ -14,19 +14,21 @@ else:
 
 class PerturbLayer(nn.Module):
     def __init__(self, in_channels=None, out_channels=None, nmasks=None, level=None, filter_size=None,
-                 debug=False, use_act=False, stride=1, act=None, unique_masks=False,
+                 debug=False, use_act=False, stride=1, act=None, unique_masks=False, mix_maps=None,
                  train_masks=False, noise_type='uniform', input_size=None):
         super(PerturbLayer, self).__init__()
-        self.nmasks = nmasks    #per input channel
-        self.unique_masks = unique_masks
-        self.level = level
-        self.filter_size = filter_size
-        self.use_act = use_act
-        self.act = act_fn(act)
-        self.debug = debug
-        self.noise_type = noise_type
+        self.nmasks = nmasks              #per input channel
+        self.unique_masks = unique_masks  # same set or different sets of nmasks per input channel
+        self.train_masks = train_masks    #whether to treat noise masks as regular trainable parameters of the model
+        self.level = level                # noise magnitude
+        self.filter_size = filter_size    #if filter_size=0, layers=(perturb, conv_1x1) else layers=(conv_NxN), N=filter_size
+        self.use_act = use_act            #whether to use activation immediately after perturbing input (set it to False for the first layer)
+        self.act = act_fn(act)            #relu, prelu, rrelu, elu, selu, tanh, sigmoid (see utils)
+        self.debug = debug                #print input, mask, output values for each batch
+        self.noise_type = noise_type      #normal or uniform
         self.in_channels = in_channels
-        self.input_size = input_size
+        self.input_size = input_size      #input image resolution (28 for MNIST, 32 for CIFAR), needed to construct masks
+        self.mix_maps = mix_maps          #whether to apply second 1x1 convolution after perturbation, to mix output feature maps
 
         if filter_size == 1:
             padding = 0
@@ -39,7 +41,8 @@ class PerturbLayer(nn.Module):
             padding = 3
             bias = False
 
-        if self.filter_size > 0:   #if filter_size=0, first_layer=[perturb, conv1x1] else first_layer=[convnxn], n=filter_size
+        if self.filter_size > 0:
+            self.noise = None
             self.layers = nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=filter_size, padding=padding, stride=stride, bias=bias),
                 nn.BatchNorm2d(out_channels),
@@ -47,8 +50,8 @@ class PerturbLayer(nn.Module):
             )
         else:
             noise_channels = in_channels if self.unique_masks else 1
-            shape = (1, noise_channels, self.nmasks, input_size, input_size)
-            self.noise = nn.Parameter(torch.Tensor(*shape), requires_grad=train_masks)
+            shape = (1, noise_channels, self.nmasks, input_size, input_size)  # can't dynamically reshape masks in forward if we want to train them
+            self.noise = nn.Parameter(torch.Tensor(*shape), requires_grad=self.train_masks)
             if noise_type == "uniform":
                 self.noise.data.uniform_(-1, 1)
             elif self.noise_type == 'normal':
@@ -68,12 +71,18 @@ class PerturbLayer(nn.Module):
                 #nn.BatchNorm2d(out_channels), #TODO: orig code uses BN here
                 nn.Conv2d(in_channels*self.nmasks, out_channels, kernel_size=1, stride=1, groups=groups),
                 nn.BatchNorm2d(out_channels),
-                self.act
+                self.act,
             )
+            if self.mix_maps:
+                self.mix_layers = nn.Sequential(
+                    nn.Conv2d(out_channels, out_channels, kernel_size=1, stride=1, groups=1),
+                    nn.BatchNorm2d(out_channels),
+                    self.act,
+                )
 
     def forward(self, x):
         if self.filter_size > 0:
-            return self.layers(x)  #image, conv, batchnorm, (relu?)
+            return self.layers(x)  #image, conv, batchnorm, relu
         else:
             y = torch.add(x.unsqueeze(2), self.noise * self.level)  # (10, 3, 1, 32, 32) + (1, 3, 128, 32, 32) --> (10, 3, 128, 32, 32)
 
@@ -84,14 +93,19 @@ class PerturbLayer(nn.Module):
                 y = self.act(y)
 
             y = y.view(-1, self.in_channels * self.nmasks, self.input_size, self.input_size)
+            y = self.layers(y)
 
-            return self.layers(y)  #image, perturb, relu, conv1x1, batchnorm
+            if self.mix_maps:
+                y = self.mix_layers(y)
+
+            return y  #image, perturb, (relu?), conv1x1, batchnorm, relu + mix_maps (conv1x1, batchnorm relu)
 
 
 class PerturbBasicBlock(nn.Module):
     expansion = 1
     def __init__(self, in_channels=None, out_channels=None, stride=1, shortcut=None, nmasks=None, train_masks=False,
-                 level=None, use_act=False, filter_size=None, act=None, unique_masks=False, noise_type=None, input_size=None, pool_type=None):
+                 level=None, use_act=False, filter_size=None, act=None, unique_masks=False, noise_type=None,
+                 input_size=None, pool_type=None, mix_maps=None):
         super(PerturbBasicBlock, self).__init__()
         self.shortcut = shortcut
         if pool_type == 'max':
@@ -104,11 +118,11 @@ class PerturbBasicBlock(nn.Module):
         self.layers = nn.Sequential(
             PerturbLayer(in_channels=in_channels, out_channels=out_channels, nmasks=nmasks, input_size=input_size,
                          level=level, filter_size=filter_size, use_act=use_act, train_masks=train_masks,
-                         act=act, unique_masks=unique_masks, noise_type=noise_type),  #perturb, relu, conv1x1
+                         act=act, unique_masks=unique_masks, noise_type=noise_type, mix_maps=mix_maps),
             pool(stride, stride),
             PerturbLayer(in_channels=out_channels, out_channels=out_channels, nmasks=nmasks, input_size=input_size//stride,
                          level=level, filter_size=filter_size, use_act=use_act, train_masks=train_masks,
-                         act=act, unique_masks=unique_masks, noise_type=noise_type),  #perturb, relu, conv1x1
+                         act=act, unique_masks=unique_masks, noise_type=noise_type, mix_maps=mix_maps),
         )
 
     def forward(self, x):
@@ -123,7 +137,7 @@ class PerturbBasicBlock(nn.Module):
 
 class PerturbResNet(nn.Module):
     def __init__(self, block, nblocks=None, avgpool=None, nfilters=None, nclasses=None, nmasks=None, input_size=32,
-                 level=None, filter_size=None, first_filter_size=None, use_act=False, train_masks=False,
+                 level=None, filter_size=None, first_filter_size=None, use_act=False, train_masks=False, mix_maps=None,
                  act=None, scale_noise=1, unique_masks=False, debug=False, noise_type=None, pool_type=None):
         super(PerturbResNet, self).__init__()
         self.nfilters = nfilters
@@ -131,10 +145,11 @@ class PerturbResNet(nn.Module):
         self.noise_type = noise_type
         self.train_masks = train_masks
         self.pool_type = pool_type
+        self.mix_maps = mix_maps
 
         layers = [PerturbLayer(in_channels=3, out_channels=nfilters, nmasks=nmasks, level=level*scale_noise,
                 debug=debug, filter_size=first_filter_size, use_act=use_act, train_masks=train_masks, input_size=input_size,
-                act=act, unique_masks=self.unique_masks, noise_type=self.noise_type)]  # Perturb (+act?) OR conv, batchnorm, relu
+                act=act, unique_masks=self.unique_masks, noise_type=self.noise_type, mix_maps=mix_maps)]
 
         if first_filter_size == 7:
             layers.append(nn.MaxPool2d(kernel_size=3, stride=2, padding=1))
@@ -162,12 +177,12 @@ class PerturbResNet(nn.Module):
         layers = []
         layers.append(block(self.nfilters, out_channels, stride, shortcut, level=level, nmasks=nmasks, use_act=use_act,
                         filter_size=filter_size, act=act, unique_masks=self.unique_masks, noise_type=self.noise_type,
-                        train_masks=self.train_masks, input_size=input_size, pool_type=self.pool_type))
+                        train_masks=self.train_masks, input_size=input_size, pool_type=self.pool_type, mix_maps=self.mix_maps))
         self.nfilters = out_channels * block.expansion
         for i in range(1, nblocks):
             layers.append(block(self.nfilters, out_channels, level=level, nmasks=nmasks, use_act=use_act,
                             train_masks=self.train_masks, filter_size=filter_size, act=act, unique_masks=self.unique_masks,
-                            noise_type=self.noise_type, input_size=input_size//stride, pool_type=self.pool_type))
+                            noise_type=self.noise_type, input_size=input_size//stride, pool_type=self.pool_type, mix_maps=self.mix_maps))
         return nn.Sequential(*layers)
 
     def forward(self, x):
@@ -185,7 +200,7 @@ class PerturbResNet(nn.Module):
 class LeNet(nn.Module):
     def __init__(self, nfilters=None, nclasses=None, nmasks=None, level=None, filter_size=None, linear=128, input_size=28,
                  debug=False, scale_noise=1, act='relu', use_act=False, first_filter_size=None, pool_type=None,
-                 dropout=None, unique_masks=False, train_masks=False, noise_type='uniform'):
+                 dropout=None, unique_masks=False, train_masks=False, noise_type='uniform', mix_maps=None):
         super(LeNet, self).__init__()
         if filter_size == 5:
             n = 5
@@ -214,17 +229,17 @@ class LeNet(nn.Module):
         self.first_layers = nn.Sequential(
             PerturbLayer(in_channels=first_channels, out_channels=nfilters, nmasks=nmasks, level=level*scale_noise,
                          filter_size=first_filter_size, use_act=use_act, act=act, unique_masks=unique_masks,
-                         train_masks=train_masks, noise_type=noise_type, input_size=input_size),
+                         train_masks=train_masks, noise_type=noise_type, input_size=input_size, mix_maps=mix_maps),
             pool(kernel_size=3, stride=2, padding=1),
 
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size,
                          use_act=True, act=act, unique_masks=unique_masks, debug=debug, train_masks=train_masks,
-                         noise_type=noise_type, input_size=input_size//2),
+                         noise_type=noise_type, input_size=input_size//2, mix_maps=mix_maps),
             pool(kernel_size=3, stride=2, padding=1),
 
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size,
                          use_act=True, act=act, unique_masks=unique_masks, train_masks=train_masks, noise_type=noise_type,
-                         input_size=input_size//4),
+                         input_size=input_size//4, mix_maps=mix_maps),
             pool(kernel_size=3, stride=2, padding=1),
         )
 
@@ -248,7 +263,7 @@ class LeNet(nn.Module):
 class CifarNet(nn.Module):
     def __init__(self, nfilters=None, nclasses=None, nmasks=None, level=None, filter_size=None, input_size=32,
                  linear=256, scale_noise=1, act='relu', use_act=False, first_filter_size=None, pool_type=None,
-                 dropout=None, unique_masks=False, debug=False, train_masks=False, noise_type='uniform'):
+                 dropout=None, unique_masks=False, debug=False, train_masks=False, noise_type='uniform', mix_maps=None):
         super(CifarNet, self).__init__()
         if filter_size == 5:
             n = 5
@@ -277,25 +292,25 @@ class CifarNet(nn.Module):
         self.first_layers = nn.Sequential(
             PerturbLayer(in_channels=first_channels, out_channels=nfilters, nmasks=nmasks, level=level*scale_noise,
                          unique_masks=unique_masks, filter_size=first_filter_size, use_act=use_act, input_size=input_size,
-                         act=act, train_masks=train_masks, noise_type=noise_type),
+                         act=act, train_masks=train_masks, noise_type=noise_type, mix_maps=mix_maps),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size,
-                         debug=debug, use_act=True, act=act,
+                         debug=debug, use_act=True, act=act, mix_maps=mix_maps,
                          unique_masks=unique_masks, train_masks=train_masks, noise_type=noise_type, input_size=input_size),
             pool(kernel_size=3, stride=2, padding=1),
 
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size,
-                         use_act=True, act=act, unique_masks=unique_masks,
+                         use_act=True, act=act, unique_masks=unique_masks, mix_maps=mix_maps,
                          train_masks=train_masks, noise_type=noise_type, input_size=input_size//2),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size,
-                         use_act=True, act=act, unique_masks=unique_masks,
+                         use_act=True, act=act, unique_masks=unique_masks, mix_maps=mix_maps,
                          train_masks=train_masks, noise_type=noise_type, input_size=input_size//2),
             pool(kernel_size=3, stride=2, padding=1),
 
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size,
-                         use_act=True, act=act, unique_masks=unique_masks,
+                         use_act=True, act=act, unique_masks=unique_masks, mix_maps=mix_maps,
                          train_masks=train_masks, noise_type=noise_type, input_size=input_size//4),
             PerturbLayer(in_channels=nfilters, out_channels=nfilters, nmasks=nmasks, level=level, filter_size=filter_size,
-                         use_act=True, act=act, unique_masks=unique_masks,
+                         use_act=True, act=act, unique_masks=unique_masks, mix_maps=mix_maps,
                          train_masks=train_masks, noise_type=noise_type, input_size=input_size//4),
             pool(kernel_size=3, stride=2, padding=1),
         )
@@ -334,9 +349,6 @@ class NoiseLayer(nn.Module):
         if self.noise.numel() == 0:
             self.noise.resize_(x.data[0].shape).uniform_()   #fill with uniform noise
             self.noise = (2 * self.noise - 1) * self.level
-            mask_size.update(self.noise.numel())
-            print('Noise mask {:>20}  {:6.2f}k, accum. total: {:4.2f}M'.format(str(list(self.noise.size())),
-                                    self.noise.numel() / 1000., mask_size.get_total() / 1000000.))
         y = torch.add(x, self.noise)
         return self.layers(y)   #input, perturb, relu, batchnorm, conv1x1
 
@@ -486,36 +498,41 @@ class ResNet(nn.Module):
 
 
 
-def resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, filter_size=0, first_filter_size=0, pool_type=None, input_size=None,
-             scale_noise=1, act='relu', use_act=True, dropout=0.5, unique_masks=False, noise_type='uniform', train_masks=False, debug=False):
+def resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, filter_size=0, first_filter_size=0, pool_type=None,
+             input_size=None, scale_noise=1, act='relu', use_act=True, dropout=0.5, unique_masks=False,
+             noise_type='uniform', train_masks=False, debug=False, mix_maps=None):
     return ResNet(BasicBlock, [2, 2, 2, 2], nfilters=nfilters, avgpool=avgpool, nclasses=nclasses)
 
 
-def noiseresnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, filter_size=0, first_filter_size=7, pool_type=None, input_size=None,
-                  scale_noise=1, act='relu', use_act=True, dropout=0.5, unique_masks=False, debug=False, noise_type='uniform', train_masks=False):
+def noiseresnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, filter_size=0, first_filter_size=7,
+                  pool_type=None, input_size=None, scale_noise=1, act='relu', use_act=True, dropout=0.5, unique_masks=False,
+                  debug=False, noise_type='uniform', train_masks=False, mix_maps=None):
     return NoiseResNet(NoiseBasicBlock, [2, 2, 2, 2], nfilters=nfilters, pool=avgpool, nclasses=nclasses,
                        level=level, first_filter_size=first_filter_size)
 
 
-def perturb_resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, filter_size=0, first_filter_size=0, pool_type=None, input_size=None,
-                     scale_noise=1, act='relu', use_act=True, dropout=0.5, unique_masks=False, debug=False, noise_type='uniform', train_masks=False):
+def perturb_resnet18(nfilters, avgpool=4, nclasses=10, nmasks=32, level=0.1, filter_size=0, first_filter_size=0,
+                     pool_type=None, input_size=None, scale_noise=1, act='relu', use_act=True, dropout=0.5,
+                     unique_masks=False, debug=False, noise_type='uniform', train_masks=False, mix_maps=None):
     return PerturbResNet(PerturbBasicBlock, [2, 2, 2, 2], nfilters=nfilters, avgpool=avgpool, nclasses=nclasses, pool_type=pool_type,
                          scale_noise=scale_noise, nmasks=nmasks, level=level, filter_size=filter_size, train_masks=train_masks,
                          first_filter_size=first_filter_size, act=act, use_act=use_act, unique_masks=unique_masks,
-                         debug=debug, noise_type=noise_type, input_size=input_size)
+                         debug=debug, noise_type=noise_type, input_size=input_size, mix_maps=mix_maps)
 
 
-def lenet(nfilters, avgpool=None, nclasses=10, nmasks=32, level=0.1, filter_size=3, first_filter_size=0, pool_type=None, input_size=None,
-          scale_noise=1, act='relu', use_act=True, dropout=0.5, unique_masks=False, debug=False, noise_type='uniform', train_masks=False):
+def lenet(nfilters, avgpool=None, nclasses=10, nmasks=32, level=0.1, filter_size=3, first_filter_size=0,
+          pool_type=None, input_size=None, scale_noise=1, act='relu', use_act=True, dropout=0.5,
+          unique_masks=False, debug=False, noise_type='uniform', train_masks=False, mix_maps=None):
     return LeNet(nfilters=nfilters, nclasses=nclasses, nmasks=nmasks, level=level, filter_size=filter_size, pool_type=pool_type,
-                 scale_noise=scale_noise, act=act, first_filter_size=first_filter_size, input_size=input_size,
+                 scale_noise=scale_noise, act=act, first_filter_size=first_filter_size, input_size=input_size, mix_maps=mix_maps,
                  use_act=use_act, dropout=dropout, unique_masks=unique_masks, debug=debug, noise_type=noise_type, train_masks=train_masks)
 
 
-def cifarnet(nfilters, avgpool=None, nclasses=10, nmasks=32, level=0.1, filter_size=3, first_filter_size=0, pool_type=None, input_size=None,
-             scale_noise=1, act='relu', use_act=True, dropout=0.5, unique_masks=False, debug=False, noise_type='uniform', train_masks=False):
+def cifarnet(nfilters, avgpool=None, nclasses=10, nmasks=32, level=0.1, filter_size=3, first_filter_size=0,
+             pool_type=None, input_size=None, scale_noise=1, act='relu', use_act=True, dropout=0.5,
+             unique_masks=False, debug=False, noise_type='uniform', train_masks=False, mix_maps=None):
     return CifarNet(nfilters=nfilters, nclasses=nclasses, nmasks=nmasks, level=level, filter_size=filter_size, pool_type=pool_type,
                     scale_noise=scale_noise, act=act, use_act=use_act, first_filter_size=first_filter_size, input_size=input_size,
-                    dropout=dropout, unique_masks=unique_masks, debug=debug, noise_type=noise_type, train_masks=train_masks)
+                    dropout=dropout, unique_masks=unique_masks, debug=debug, noise_type=noise_type, train_masks=train_masks, mix_maps=mix_maps)
 
 
