@@ -17,7 +17,7 @@ After correcting this issue, I ran large number of experiments trying to see if 
 
 Here's for example, the difference between ResNet18-like models: a baseline model with reduced number of filters to keep the same parameter count, a model where all layers except first one use 1x1 convolutions only, and a model where all layers except first one perturbations followed by 1x1 convolutions. All three models have ~5.5M parameters: 
 
-![img](https://postimg.cc/image/h8vc23qxj)
+![img](https://s15.postimg.cc/5jrce4zyz/image.png)
 
 The accuracy difference between regular resnet baseline and PNN remains ~5% throughout the training, and the addition of noise masks only results in less than 1% improvement over equivalently "crippled" resnet without any noise applied.
 
@@ -63,12 +63,12 @@ python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-
 python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 0 --filter_size 0 --nmasks 1 
 ```
 
-6. PNN with noise masks in all layers except the first layer, which uses regular 3x3 convolutions with fanout=64. Internally fanout is implemented with grouped 1x1 convolutions. Note --unique_masks arg, which creates unique set of masks for each input channel, in every layer. Test Accuracy: 84.7%
+6. PNN with noise masks in all layers except the first layer, which uses regular 3x3 convolutions with fanout=64. Internally fanout is implemented with grouped 1x1 convolutions. Note: --unique_masks arg creates unique set of masks for each input channel, in every layer, and --mix_maps argument which uses extra 1x1 convolutional layer in all perturbation layers. Test Accuracy: 82.7%
 ```
-python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 0 --nmasks 64 --unique_masks
+python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 0 --nmasks 64 --unique_masks --mix_maps
 ```
 
-7. Same as above, but with --no-unique_masks argument, which means that the same set of masks is used for each input channel. Test Accuracy: 84.4%
+7. Same as above, but with --no-unique_masks argument, which means that the same set of masks is used for each input channel. Test Accuracy: 82.4%
 ```
 python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 0 --nmasks 64 --no-unique_masks
 ```
