@@ -80,9 +80,13 @@ Experiments 6 and 7 are the closest to what was described in the paper.
 `python main.py --net-type 'perturb_resnet18' --dataset-test 'CIFAR10' --dataset-train 'CIFAR10' --nfilters 128 --batch-size 16 --learning-rate 1e-3 --first_filter_size 3 --filter_size 0 --nmasks 64 --no-unique_masks --train_masks`
 
 ## Weakness of reasoning:
-Sections 3.3 and 3.4 in the paper demonstrate how it's possible to find PNN parameters to reproduce the output of a regular CNN. One issue with that is it's only true for a single input x. So while for any given input x, PNN might be able to find the weights required to compute the correct output y, it does not follow that it can find weights to do that for all input samples in the dataset.
+Section 3.3: "given the known input x and convolution transformation matrix A, we can always solve for the matching noise perturbation matrix N". 
 
-Intuitively, it seems like PNN lacks the main feature extraction property of a regular CNN: it cannot directly match any spatial patterns with a filter. 
+While for any given single input sample PNN might be able to find the weights required to match the output of a CNN, it does not follow that it can find weights to do that for all input samples in the dataset. 
+
+Section 3.4: The result of a single convolution operation is represented as a value of the center pixel Xc in a patch X, plus some quantity Nc (a function of filter weights W and the neighboring pixels of Xc): Y = XW = Xc + Nc. The claim is: "Establishing that Nc behaves like additive perturbation noise, will allows us to relate the CNN formulation to the PNN formulation". 
+
+Even if Nc statistically behaves like random noise does not mean it can be replaced with random noise. The random noise in PNN does not depend on values of neighboring pixels in the patch, unlike Nc in a regular convolution. PNN layer lacks the main feature extraction property of a regular convolution: it cannot directly match any spatial patterns with a filter. 
 
 ## Conclusion
 It appears that perturbing layer inputs with noise does not provide any significant benefit. Simple 1x1 convolutions without noise masks provide similar performance. No matter how we apply noise masks, the accuracy drop resulting from using 1x1 filters is severe (~5% on CIFAR-10 even when not modifying the first layer). The results published by the authors are invalid due to incorrect accuracy calculation method.
